@@ -10,8 +10,9 @@ using ll = int64_t;
 
 int32_t batch_size = 100;
 int32_t feature_size1 = 100;
-int32_t iters_num = 10000;
+int32_t iters_num = 1201;
 double learning_rate = 0.1;
+
 
 int32_t image_size;
 int32_t label_size;
@@ -37,7 +38,6 @@ class Tensor
 };
 
 uint32_t reverseInt (uint32_t i);
-
 void sigmoid(Tensor &a);
 void relu(Tensor &s, Tensor &t);
 void dot(Tensor &a, Tensor &b, Tensor &c, int32_t TorN);
@@ -54,52 +54,30 @@ double loss(Tensor &y, Tensor &t);
 void div_by_scalar(Tensor &a, double d);
 void sum_vertical(Tensor &a, Tensor &v);
 void back_sigmoid(Tensor &dz, Tensor &z);
+double accuracy(Tensor &y, Tensor &t);
 
-
-
-//行列を縦方向に和を取り、ベクトルにする
-void sum_vertical(Tensor &a, Tensor &v) {
-	if (v.h != 1 || a.w != v.w) {
-		cout << "Tensor size mismatch in sum_vertical." << endl;
-		return;
-	}
-	init_zero(v);
-	for (ll i=0; i < a.h; i++) {
-		for (ll j=0; j < a.w; j++) {
-			v.val[j] += a.val[i*a.w + j];
-		}
-	}
+void affine_layer(Tensor &x, Tensor &weight, Tensor &bias, Tensor &z) {
+	dot(x, weight, z, NandN);
+	add(z, bias);
 }
 
-
-
-//dz行列の各要素に、z、(1-z)の対応する各要素をかけていく
-void back_sigmoid(Tensor &dz, Tensor &z) {
-	if (dz.h != z.h || dz.w != z.w) {
-		cout << "Tensor size mismatch in back_sigmoid." << endl;
-		return;
-	}
-
-	for (ll i=0; i < dz.h; i++) {
-		for (ll j=0; j < dz.w; j++) {
-			dz.val[i*dz.w+j] *= z.val[i*dz.w+j] * (1 - z.val[i*dz.w+j]);
-		}
-	}
-}
 
 int main() {
 
 	Tensor train_data, train_label;
+	Tensor test_data, test_label;
 
 	readTrainingFile("./mnist/train-images-idx3-ubyte", train_data);
 	readLabelFile("./mnist/train-labels-idx1-ubyte", train_label); //one-hot label
+	readTrainingFile("./mnist/t10k-images-idx3-ubyte", test_data);
+	readLabelFile("./mnist/t10k-labels-idx1-ubyte", test_label); //one-hot label
 
 	int32_t train_size = train_data.h;
+	int32_t test_size = test_data.h;
 	int32_t iter_per_epoch = train_size / batch_size;
 
 	image_size = train_data.w;
 	label_size = train_label.w;
-	
 
 	Tensor x(batch_size, image_size);
 	Tensor t(batch_size, label_size);
@@ -112,16 +90,18 @@ int main() {
 
 	Tensor z1(batch_size, feature_size1);
 	Tensor dz1(batch_size, feature_size1);
+
+	Tensor z1_test(test_size, feature_size1);
+
 	Tensor w2(feature_size1, label_size);
 	Tensor dw2(feature_size1, label_size);
-
 	Tensor b2(1, label_size);
 	Tensor db2(1, label_size);
 
 	Tensor y(batch_size, label_size);
 	Tensor dy(batch_size, label_size);
 
-
+	Tensor y_test(test_size, label_size);
 
 	init_zero(x);
 	init_zero(t);
@@ -135,6 +115,8 @@ int main() {
 	init_zero(z1);
 	init_zero(dz1);
 
+	init_zero(z1_test);
+
 	init_random(w2);
 	init_zero(dw2);
 
@@ -144,23 +126,36 @@ int main() {
 	init_zero(y);
 	init_zero(dy);
 
-	double lossval;
+	init_zero(y_test);
 
-	
+	//double lossval;
+
+	cout << "test accuracy in ..." << endl;
+
 	for (ll i=0; i < iters_num; i++) {
 		batch_random_choice(train_data, train_label, x, t);
 		//順伝播開始
-		dot(x, w1, z1, NandN);
-		add(z1, b1);
+		affine_layer(x, w1, b1, z1);
+		//dot(x, w1, z1, NandN);
+		//add(z1, b1);
 		sigmoid(z1);
-		dot(z1, w2, y, NandN);
-		add(y, b2);
+		affine_layer(z1, w2, b2, y);
+		//dot(z1, w2, y, NandN);
+		//add(y, b2);
 		softmax(y);
-		lossval = loss(y, t);
+		//lossval = loss(y, t);
 		//順伝播終了
 
-		if (i % 100 == 0) {
-			cout << "iter " << i << " : " << lossval << endl;
+		if (i % iter_per_epoch == 0) {
+			affine_layer(test_data, w1, b1, z1_test);
+			//dot(test_data, w1, z1_test, NandN);
+			//add(z1_test, b1);
+			sigmoid(z1_test);
+			affine_layer(z1_test, w2, b2, y_test);
+			//dot(z1_test, w2, y_test, NandN);
+			//add(y_test, b2);
+			double acc = accuracy(y_test, test_label);
+			cout << "iter " << i << " : " << acc << endl;
 		}
 
 		//逆伝播開始
@@ -186,6 +181,8 @@ int main() {
 	}
 	train_data.FreeVal();
 	train_label.FreeVal();
+	test_data.FreeVal();
+	test_label.FreeVal();
 	x.FreeVal();
 	t.FreeVal();
 	w1.FreeVal();
@@ -194,12 +191,14 @@ int main() {
 	db1.FreeVal();
 	z1.FreeVal();
 	dz1.FreeVal();
+	z1_test.FreeVal();
 	w2.FreeVal();
 	dw2.FreeVal();
 	b2.FreeVal();
 	db2.FreeVal();
 	y.FreeVal();
 	dy.FreeVal();
+	y_test.FreeVal();
 
 	return 0;
 }
@@ -539,4 +538,66 @@ double loss(Tensor &y, Tensor &t) {
 	}
 	lossval /= batch_size;
 	return lossval;
+}
+
+//行列を縦方向に和を取り、ベクトルにする
+void sum_vertical(Tensor &a, Tensor &v) {
+	if (v.h != 1 || a.w != v.w) {
+		cout << "Tensor size mismatch in sum_vertical." << endl;
+		return;
+	}
+	init_zero(v);
+	for (ll i=0; i < a.h; i++) {
+		for (ll j=0; j < a.w; j++) {
+			v.val[j] += a.val[i*a.w + j];
+		}
+	}
+}
+
+
+
+//dz行列の各要素に、z、(1-z)の対応する各要素をかけていく
+void back_sigmoid(Tensor &dz, Tensor &z) {
+	if (dz.h != z.h || dz.w != z.w) {
+		cout << "Tensor size mismatch in back_sigmoid." << endl;
+		return;
+	}
+
+	for (ll i=0; i < dz.h; i++) {
+		for (ll j=0; j < dz.w; j++) {
+			dz.val[i*dz.w+j] *= z.val[i*dz.w+j] * (1 - z.val[i*dz.w+j]);
+		}
+	}
+}
+
+double accuracy(Tensor &y, Tensor &t) {
+	if(y.h != t.h || y.w != t.w) {
+		cout << "Tensor size mismatch in accuracy." << endl;
+		return -1.;
+	}
+	int32_t ymax_idx;
+	int32_t tmax_idx;
+	double ymax_val;
+	double tmax_val;
+	double acc = 0.;
+	for (ll i=0; i < y.h; i++) {
+		ymax_idx = -1;
+		tmax_idx = -1;
+		ymax_val = -1.;
+		tmax_val = -1.;
+		for (ll j=0; j < y.w; j++) {
+			if (ymax_val < y.val[i*y.w+j]) {
+				ymax_idx = j;
+				ymax_val = y.val[i*y.w+j];
+			}
+			if (tmax_val < t.val[i*y.w+j]) {
+				tmax_idx = j;
+				tmax_val = t.val[i*y.w+j];
+			}
+		}
+		if (ymax_idx == tmax_idx) {
+			acc += 1.;
+		}
+	}
+	return acc / y.h;
 }
