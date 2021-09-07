@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <random>
+#include <chrono>
 
 using namespace std;
 using ll = int64_t;
@@ -60,7 +61,6 @@ void affine_layer(Tensor &x, Tensor &weight, Tensor &bias, Tensor &z) {
 	dot(x, weight, z, NandN);
 	add(z, bias);
 }
-
 
 int main() {
 
@@ -130,6 +130,9 @@ int main() {
 
 	//double lossval;
 
+	//時間計測開始
+	auto start = chrono::system_clock::now();
+
 	cout << "test accuracy in ..." << endl;
 
 	for (ll i=0; i < iters_num; i++) {
@@ -179,6 +182,12 @@ int main() {
 		scale_sub(w2, dw2, w2, learning_rate); //w2更新
 		//逆伝播終了
 	}
+	auto end = chrono::system_clock::now();
+	auto dur = end - start;
+	auto msec = chrono::duration_cast<chrono::milliseconds>(dur).count();
+
+	cout << (double)msec / 1000 << "sec." << endl;
+
 	train_data.FreeVal();
 	train_label.FreeVal();
 	test_data.FreeVal();
