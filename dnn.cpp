@@ -135,12 +135,15 @@ int main() {
 
 	cout << "test accuracy in ..." << endl;
 
+	//#pragma acc data copyin(test_data.val[0:test_data.h*test_data.w], w1.val[0:w1.h*w1.w], w2.val[0:w2.h*w2.w], b1.val[0:b1.h*b1.w], b2.val[0:b2.h*b2.w])
+	//#pragma acc data create(x.val[0:x.h*x.w], t.val[0:t.h*t.w], dw1.val[0:dw1.h*dw1.w], db1.val[0:db1.h*db1.w], z1.val[0:z1.h*z1.w], dz1.val[0:dz1.h*dz1.w], z1_test.val[0:z1_test.h*z1_test.w], dw2.val[0:dw2.h*dw2.w], db2.val[0:db2.h*db2.w], y.val[0:y.h*y.w], dy.val[0:dy.h*dy.w], y_test.val[0:y_test.h*y_test.w])
 	for (ll i=0; i < iters_num; i++) {
 		batch_random_choice(train_data, train_label, x, t);
 		//順伝播開始
-		affine_layer(x, w1, b1, z1);
-		//dot(x, w1, z1, NandN);
-		//add(z1, b1);
+		//affine_layer(x, w1, b1, z1);
+		dot(x, w1, z1, NandN);
+
+		add(z1, b1);
 		sigmoid(z1);
 		affine_layer(z1, w2, b2, y);
 		//dot(z1, w2, y, NandN);
@@ -373,43 +376,75 @@ void dot(Tensor &a, Tensor &b, Tensor &c, int32_t TorN) {
 		cout << "tensor size mismatch in dot." << endl << endl;
 		return;
 	}
+	int32_t a_size = a.h*a.w;
+	int32_t b_size = b.h*b.w;
+	int32_t c_size = c.h*c.w;
+	double *A, *B, *C;
+	A = a.val;
+	B = b.val;
+	C = c.val;
 	switch(TorN) {
 		case NandN:
+			//#pragma acc data copyin(a.val[0:a_size], b.val[0:b.h*b.w]) copyout(c.val[0:c.h*c.w])
+			#pragma acc data copyin(A[0:a_size], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
+			#pragma acc kernels present(A, B, C)
+			#pragma acc loop independent gang
 			for (ll i=0; i < m; i++) {
+				#pragma acc loop independent vector
 				for (ll j=0; j < n; j++) {
-					c.val[i*n+j] = 0.;
+					//c.val[i*n+j] = 0.;
+					C[i*n+j] = 0.;
+					#pragma acc loop independent seq
 					for (ll x=0; x < k; x++) {
-						c.val[i*n+j] += a.val[i*k+x] * b.val[x*n+j];
+						C[i*n+j] += A[i*k+x] * B[x*n+j];
 					}
 				}
 			}
 			break;
 		case TandN:
+			//#pragma acc data copyin(a.val[0:a_size], b.val[0:b.h*b.w]) copyout(c.val[0:c.h*c.w])
+			#pragma acc data copyin(A[0:a_size], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
+			#pragma acc kernels present(A, B, C)
+			#pragma acc loop independent gang
 			for (ll i=0; i < m; i++) {
+				#pragma acc loop independent vector
 				for (ll j=0; j < n; j++) {
-					c.val[i*n+j] = 0.;
+					C[i*n+j] = 0.;
+					#pragma acc loop independent seq
 					for (ll x=0; x < k; x++) {
-						c.val[i*n+j] += a.val[a.w*x+i] * b.val[x*n+j];
+						C[i*n+j] += A[m*x+i] * B[x*n+j];
 					}
 				}
 			}
 			break;
 		case NandT:
+			//#pragma acc data copyin(a.val[0:a_size], b.val[0:b.h*b.w]) copyout(c.val[0:c.h*c.w])
+			#pragma acc data copyin(A[0:a.h*a.w], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
+			#pragma acc kernels present(A, B, C)
+			#pragma acc loop independent gang
 			for (ll i=0; i < m; i++) {
+				#pragma acc loop independent vector
 				for (ll j=0; j < n; j++) {
-					c.val[i*n+j] = 0.;
+					C[i*n+j] = 0.;
+					#pragma acc loop independent seq
 					for (ll x=0; x < k; x++) {
-						c.val[i*n+j] += a.val[i*k+x] * b.val[b.w*j+x];
+						C[i*n+j] += A[i*k+x] * B[k*j+x];
 					}
 				}
 			}
 			break;
 		case TandT:
+			//#pragma acc data copyin(a.val[0:a_size], b.val[0:b.h*b.w]) copyout(c.val[0:c.h*c.w])
+			#pragma acc data copyin(A[0:a.h*a.w], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
+			#pragma acc kernels present(A, B, C)
+			#pragma acc loop independent gang
 			for (ll i=0; i < m; i++) {
+				#pragma acc loop independent vector
 				for (ll j=0; j < n; j++) {
-					c.val[i*n+j] = 0.;
+					C[i*n+j] = 0.;
+					#pragma acc loop independent seq
 					for (ll x=0; x < k; x++) {
-						c.val[i*n+j] += a.val[a.w*x+i] * b.val[b.w*j+x];
+						C[i*n+j] += A[m*x+i] * B[k*j+x];
 					}
 				}
 			}
