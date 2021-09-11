@@ -26,23 +26,89 @@ int32_t label_size;
 
 class Tensor
 {
+	private:
+		double* _A{nullptr};
+
 	public:
-		double* val;
-		int32_t h;
-		int32_t w;
+
+		int32_t h{0};
+		int32_t w{0};
+		int32_t size{0};
+
+		#pragma acc routine seq
+		double& operator[](size_t idx) { return _A[idx]; };
 		
-		Tensor();
-		Tensor(int32_t height, int32_t width);
-		void Print();
-		void SetDim(int32_t height, int32_t width);
-		void FreeVal();
+		explicit Tensor() { };
+		//コンストラクタでもうgpu側にメモリ領域を確保してしまう
+		explicit Tensor(int32_t height, int32_t width) {
+			h = height; w = width; size = height * width;
+			_A = new double[size];
+			#pragma acc enter data copyin(this)
+			#pragma acc enter data create(_A[0:size])
+		}
+		~Tensor() {
+			#pragma acc exit data delete(_A[0:size])
+			#pragma acc exit data delete(this)
+			delete [] _A;
+			_A = NULL;
+			h = 0; w = 0; size = 0;
+		}
+
+		inline void updateHost() {
+			#pragma acc update self(_A[0:size])
+		}
+		inline void updateDev() {
+			#pragma acc update device(_A[0:size])
+		}
+
+		void Print() {
+			for (ll i=0; i < h; i++) {
+				for (ll j=0; j < w; j++) {
+					cout << _A[i*w+j] << " ";
+				}
+				cout << endl;
+			}
+		}
+		void SetDim(int32_t height, int32_t width) {
+			h = height; w = width; size = height * width;
+			_A = new double[size];
+			#pragma acc enter data copyin(this)
+			#pragma acc enter data create(_A[0:size])
+		}
+		//void FreeVal();
 };
+
+//Tensor::Tensor() {
+	//h = 0; w = 0;
+//}
+//Tensor::Tensor(int32_t height, int32_t width) {
+	//h = height; w = width;
+	//val = (double*)malloc(sizeof(double) * height * width);
+//}
+
+//void Tensor::Print() {
+	//for (ll i=0; i < h; i++) {
+		//for (ll j=0; j < w; j++) {
+			//cout << val[i*w+j] << " ";
+		//}
+		//cout << endl;
+	//}
+//}
+
+//void Tensor::SetDim(int32_t height, int32_t width) {
+	//h = height; w = width;
+	//val = (double*)malloc(sizeof(double) * height * width);
+//}
+
+//void Tensor::FreeVal() {
+	//free(val);
+//}
 
 uint32_t reverseInt (uint32_t i);
 void sigmoid(Tensor &a);
 void relu(Tensor &s, Tensor &t);
 void dot(Tensor &a, Tensor &b, Tensor &c, int32_t TorN);
-void add(Tensor &a, Tensor &b); //aは行列、bはベクトル。aの各行にbを足しこむ
+void add_bias(Tensor &a, Tensor &b); //aは行列、bはベクトル。aの各行にbを足しこむ
 void scale_sub(Tensor &a, Tensor &b, Tensor &c, double scale); //a-scale*b
 uint32_t reverseInt (uint32_t i);
 void readTrainingFile(string filename, Tensor &images);
@@ -59,7 +125,7 @@ double accuracy(Tensor &y, Tensor &t);
 
 void affine_layer(Tensor &x, Tensor &weight, Tensor &bias, Tensor &z) {
 	dot(x, weight, z, NandN);
-	add(z, bias);
+	add_bias(z, bias);
 }
 
 int main() {
@@ -71,6 +137,10 @@ int main() {
 	readLabelFile("./mnist/train-labels-idx1-ubyte", train_label); //one-hot label
 	readTrainingFile("./mnist/t10k-images-idx3-ubyte", test_data);
 	readLabelFile("./mnist/t10k-labels-idx1-ubyte", test_label); //one-hot label
+	
+	test_data.updateDev();
+	test_label.updateDev();
+
 
 	int32_t train_size = train_data.h;
 	int32_t test_size = test_data.h;
@@ -107,9 +177,11 @@ int main() {
 	init_zero(t);
 
 	init_random(w1);
+	w1.updateDev();
 	init_zero(dw1);
 
 	init_zero(b1);
+	b1.updateDev();
 	init_zero(db1);
 
 	init_zero(z1);
@@ -118,9 +190,11 @@ int main() {
 	init_zero(z1_test);
 
 	init_random(w2);
+	w2.updateDev();
 	init_zero(dw2);
 
 	init_zero(b2);
+	b2.updateDev();
 	init_zero(db2);
 	
 	init_zero(y);
@@ -137,13 +211,16 @@ int main() {
 
 	//#pragma acc data copyin(test_data.val[0:test_data.h*test_data.w], w1.val[0:w1.h*w1.w], w2.val[0:w2.h*w2.w], b1.val[0:b1.h*b1.w], b2.val[0:b2.h*b2.w])
 	//#pragma acc data create(x.val[0:x.h*x.w], t.val[0:t.h*t.w], dw1.val[0:dw1.h*dw1.w], db1.val[0:db1.h*db1.w], z1.val[0:z1.h*z1.w], dz1.val[0:dz1.h*dz1.w], z1_test.val[0:z1_test.h*z1_test.w], dw2.val[0:dw2.h*dw2.w], db2.val[0:db2.h*db2.w], y.val[0:y.h*y.w], dy.val[0:dy.h*dy.w], y_test.val[0:y_test.h*y_test.w])
+
 	for (ll i=0; i < iters_num; i++) {
 		batch_random_choice(train_data, train_label, x, t);
+		x.updateDev();
+		t.updateDev();
 		//順伝播開始
-		//affine_layer(x, w1, b1, z1);
-		dot(x, w1, z1, NandN);
+		affine_layer(x, w1, b1, z1);
+		//dot(x, w1, z1, NandN);
 
-		add(z1, b1);
+		//add(z1, b1);
 		sigmoid(z1);
 		affine_layer(z1, w2, b2, y);
 		//dot(z1, w2, y, NandN);
@@ -166,6 +243,7 @@ int main() {
 
 		//逆伝播開始
 		scale_sub(y, t, dy, 1.);
+
 		div_by_scalar(dy, (double)batch_size);
 
 		//softmax with loss 通過
@@ -191,60 +269,17 @@ int main() {
 
 	cout << (double)msec / 1000 << "sec." << endl;
 
-	train_data.FreeVal();
-	train_label.FreeVal();
-	test_data.FreeVal();
-	test_label.FreeVal();
-	x.FreeVal();
-	t.FreeVal();
-	w1.FreeVal();
-	dw1.FreeVal();
-	b1.FreeVal();
-	db1.FreeVal();
-	z1.FreeVal();
-	dz1.FreeVal();
-	z1_test.FreeVal();
-	w2.FreeVal();
-	dw2.FreeVal();
-	b2.FreeVal();
-	db2.FreeVal();
-	y.FreeVal();
-	dy.FreeVal();
-	y_test.FreeVal();
 
 	return 0;
 }
 
-Tensor::Tensor() {
-	h = 0; w = 0;
-}
-Tensor::Tensor(int32_t height, int32_t width) {
-	h = height; w = width;
-	val = (double*)malloc(sizeof(double) * height * width);
-}
-
-void Tensor::Print() {
-	for (ll i=0; i < h; i++) {
-		for (ll j=0; j < w; j++) {
-			cout << val[i*w+j] << " ";
-		}
-		cout << endl;
-	}
-}
-
-void Tensor::SetDim(int32_t height, int32_t width) {
-	h = height; w = width;
-	val = (double*)malloc(sizeof(double) * height * width);
-}
-
-void Tensor::FreeVal() {
-	free(val);
-}
-
 void sigmoid(Tensor &a) {
+	#pragma acc kernels present(a)
+	#pragma acc loop independent gang
 	for (ll i=0; i < a.h; i++) {
+		#pragma acc loop independent vector
 		for (ll j=0; j < a.w; j++) {
-			a.val[i*a.w + j] = 1. / (1. + exp(-a.val[i*a.w + j]));
+			a[i*a.w + j] = 1. / (1. + exp(-a[i*a.w + j]));
 		}
 	}
 }
@@ -290,13 +325,13 @@ void readTrainingFile(string filename, Tensor &images){
 	//cout << magic_number << " " << number_of_images << " " << rows << " " << cols << endl;
 
 	for(int32_t i = 0; i < number_of_images; i++){
-		//images.val[i].resize(rows * cols);
+		//images[i].resize(rows * cols);
 
 		for(int32_t row = 0; row < rows; row++){
 			for(int32_t col = 0; col < cols; col++){
 				unsigned char temp = 0;
 				ifs.read((char*)&temp,sizeof(temp));
-				images.val[i*rows*cols + row*cols + col] = (double)temp;
+				images[i*rows*cols + row*cols + col] = (double)temp;
 			}
 		}
 	}
@@ -332,7 +367,7 @@ void readLabelFile(string filename, Tensor &label){
 			cout << "label is not 0-9 digits!" << endl;
 			return;
 		}
-		label.val[i*10 + (int32_t)temp] = 1.;
+		label[i*10 + (int32_t)temp] = 1.;
 	}
 }
 
@@ -379,88 +414,96 @@ void dot(Tensor &a, Tensor &b, Tensor &c, int32_t TorN) {
 	int32_t a_size = a.h*a.w;
 	int32_t b_size = b.h*b.w;
 	int32_t c_size = c.h*c.w;
-	double *A, *B, *C;
-	A = a.val;
-	B = b.val;
-	C = c.val;
+	//double *A, *B, *C;
+	//A = a;
+	//B = b;
+	//C = c;
+
+	//a.updateDev();
+	//b.updateDev();
+
 	switch(TorN) {
 		case NandN:
-			//#pragma acc data copyin(a.val[0:a_size], b.val[0:b.h*b.w]) copyout(c.val[0:c.h*c.w])
-			#pragma acc data copyin(A[0:a_size], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
-			#pragma acc kernels present(A, B, C)
+			//#pragma acc data copyin(a[0:a_size], b[0:b.h*b.w]) copyout(c[0:c.h*c.w])
+			//#pragma acc data copyin(A[0:a_size], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
+			#pragma acc kernels present(a, b, c)
 			#pragma acc loop independent gang
 			for (ll i=0; i < m; i++) {
 				#pragma acc loop independent vector
 				for (ll j=0; j < n; j++) {
-					//c.val[i*n+j] = 0.;
-					C[i*n+j] = 0.;
-					#pragma acc loop independent seq
+					c[i*n+j] = 0.;
+					//C[i*n+j] = 0.;
+					#pragma acc loop seq
 					for (ll x=0; x < k; x++) {
-						C[i*n+j] += A[i*k+x] * B[x*n+j];
+						c[i*n+j] += a[i*k+x] * b[x*n+j];
 					}
 				}
 			}
 			break;
 		case TandN:
-			//#pragma acc data copyin(a.val[0:a_size], b.val[0:b.h*b.w]) copyout(c.val[0:c.h*c.w])
-			#pragma acc data copyin(A[0:a_size], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
-			#pragma acc kernels present(A, B, C)
+			//#pragma acc data copyin(a[0:a_size], b[0:b.h*b.w]) copyout(c[0:c.h*c.w])
+			//#pragma acc data copyin(A[0:a_size], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
+			#pragma acc kernels present(a, b, c)
 			#pragma acc loop independent gang
 			for (ll i=0; i < m; i++) {
 				#pragma acc loop independent vector
 				for (ll j=0; j < n; j++) {
-					C[i*n+j] = 0.;
-					#pragma acc loop independent seq
+					c[i*n+j] = 0.;
+					#pragma acc loop seq
 					for (ll x=0; x < k; x++) {
-						C[i*n+j] += A[m*x+i] * B[x*n+j];
+						c[i*n+j] += a[m*x+i] * b[x*n+j];
 					}
 				}
 			}
 			break;
 		case NandT:
-			//#pragma acc data copyin(a.val[0:a_size], b.val[0:b.h*b.w]) copyout(c.val[0:c.h*c.w])
-			#pragma acc data copyin(A[0:a.h*a.w], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
-			#pragma acc kernels present(A, B, C)
+			//#pragma acc data copyin(a[0:a_size], b[0:b.h*b.w]) copyout(c[0:c.h*c.w])
+			//#pragma acc data copyin(A[0:a.h*a.w], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
+			#pragma acc kernels present(a, b, c)
 			#pragma acc loop independent gang
 			for (ll i=0; i < m; i++) {
 				#pragma acc loop independent vector
 				for (ll j=0; j < n; j++) {
-					C[i*n+j] = 0.;
-					#pragma acc loop independent seq
+					c[i*n+j] = 0.;
+					#pragma acc loop seq
 					for (ll x=0; x < k; x++) {
-						C[i*n+j] += A[i*k+x] * B[k*j+x];
+						c[i*n+j] += a[i*k+x] * b[k*j+x];
 					}
 				}
 			}
 			break;
 		case TandT:
-			//#pragma acc data copyin(a.val[0:a_size], b.val[0:b.h*b.w]) copyout(c.val[0:c.h*c.w])
-			#pragma acc data copyin(A[0:a.h*a.w], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
-			#pragma acc kernels present(A, B, C)
+			//#pragma acc data copyin(a[0:a_size], b[0:b.h*b.w]) copyout(c[0:c.h*c.w])
+			//#pragma acc data copyin(A[0:a.h*a.w], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
+			#pragma acc kernels present(a, b, c)
 			#pragma acc loop independent gang
 			for (ll i=0; i < m; i++) {
 				#pragma acc loop independent vector
 				for (ll j=0; j < n; j++) {
-					C[i*n+j] = 0.;
-					#pragma acc loop independent seq
+					c[i*n+j] = 0.;
+					#pragma acc loop seq
 					for (ll x=0; x < k; x++) {
-						C[i*n+j] += A[m*x+i] * B[k*j+x];
+						c[i*n+j] += a[m*x+i] * b[k*j+x];
 					}
 				}
 			}
 			break;
 	}
+	//c.updateHost();
 }
 
 //行列aの各行にベクトルbを足しこむ
-void add(Tensor &a, Tensor &b) {
+void add_bias(Tensor &a, Tensor &b) {
 	if (a.w != b.w) {
 		cout << "Tensor size mismatch in add." << endl;
 		return;
 	}
+	#pragma acc kernels present(a, b)
+	#pragma acc loop independent gang
 	for (ll i=0; i < a.h; i++) {
+		#pragma acc loop independent vector
 		for (ll j=0; j < a.w; j++) {
-			a.val[i*a.w + j] += b.val[j];
+			a[i*a.w + j] += b[j];
 		}
 	}
 }
@@ -471,17 +514,23 @@ void scale_sub(Tensor &a, Tensor &b, Tensor &c, double scale) {
 		cout << "Tensor size mismatch in sub." << endl;
 		return;
 	}
+	#pragma acc kernels present(a, b, c)
+	#pragma acc loop independent gang
 	for (ll i=0; i < a.h; i++) {
+		#pragma acc loop independent vector
 		for (ll j=0; j < a.w; j++) {
-			c.val[i*a.w + j] = a.val[i*a.w + j] - scale*b.val[i*a.w + j];
+			c[i*a.w + j] = a[i*a.w + j] - scale*b[i*a.w + j];
 		}
 	}
 }
 
 void div_by_scalar(Tensor &a, double d) {
+	#pragma acc kernels present(a)
+	#pragma acc loop independent gang
 	for (ll i=0; i < a.h; i++) {
+		#pragma acc loop independent vector
 		for (ll j=0; j < a.w; j++) {
-			a.val[i*a.w + j] = a.val[i*a.w + j] / d;
+			a[i*a.w + j] = a[i*a.w + j] / d;
 		}
 	}
 }
@@ -493,7 +542,7 @@ void relu(Tensor &s, Tensor &t) {
 	}
 	int32_t l = s.w;
 	for (ll i=0; i < l; i++) {
-		t.val[i] = (s.val[i] < 0.) ? 0. : s.val[i];
+		t[i] = (s[i] < 0.) ? 0. : s[i];
 	}
 }
 
@@ -509,7 +558,7 @@ void init_random(Tensor &w) {
 
 	for (ll i=0; i < height; i++) {
 		for (ll j=0; j < width; j++) {
-			w.val[i*width + j] = dist(engine);
+			w[i*width + j] = dist(engine);
 		}
 	}
 }
@@ -520,7 +569,7 @@ void init_zero(Tensor &w) {
 
 	for (ll i=0; i < height; i++) {
 		for (ll j=0; j < width; j++) {
-			w.val[i*width + j] = 0.;
+			w[i*width + j] = 0.;
 		}
 	}
 }
@@ -536,31 +585,35 @@ void batch_random_choice(Tensor &dataset, Tensor &labelset, Tensor &x, Tensor &t
 		//cout << img_idx << endl;
 
 		for (ll j=0; j < 10; j++) {
-			t.val[i*10 + j] = labelset.val[img_idx*10 + j];
+			t[i*10 + j] = labelset[img_idx*10 + j];
 		}
 		for (ll j=0; j < image_size; j++) {
-			x.val[i*image_size + j] = dataset.val[img_idx*image_size + j];
+			x[i*image_size + j] = dataset[img_idx*image_size + j];
 		}
 	}
 }
 
 void softmax(Tensor &a) {
+	#pragma acc kernels present(a)
+	#pragma acc loop independent gang
 	for (ll i=0; i < a.h; i++) {
 		double max_pxl = -1000000.;
+		#pragma acc loop seq
 		for (ll j=0; j < a.w; j++) {
-			if (max_pxl < a.val[i*a.w + j]) {
-				max_pxl = a.val[i*a.w + j];
-			}
+			max_pxl = max(max_pxl, a[i*a.w + j]);
 		}
 		double sum_exp = 0.;
+
 		double exp_a_c;
+		#pragma acc loop seq
 		for (ll j=0; j < a.w; j++) {
-			exp_a_c = exp(a.val[i*a.w + j] - max_pxl);
-			a.val[i*a.w + j] = exp_a_c;
+			exp_a_c = exp(a[i*a.w + j] - max_pxl);
+			a[i*a.w + j] = exp_a_c;
 			sum_exp += exp_a_c;
 		}
+		#pragma acc loop independent vector
 		for (ll j=0; j < a.w; j++) {
-			a.val[i*a.w + j] /= sum_exp;
+			a[i*a.w + j] /= sum_exp;
 		}
 	}
 }
@@ -573,15 +626,15 @@ double loss(Tensor &y, Tensor &t) {
 	}
 
 	double delta = 0.0000001;
-	double lossval = 0.;
+	double los = 0.;
 
 	for (ll i=0; i < y.h; i++) {
 		for (ll j=0; j < y.w; j++) {
-			lossval += -t.val[i*y.w + j] * log(y.val[i*y.w + j] + delta);
+			los += -t[i*y.w + j] * log(y[i*y.w + j] + delta);
 		}
 	}
-	lossval /= batch_size;
-	return lossval;
+	los /= batch_size;
+	return los;
 }
 
 //行列を縦方向に和を取り、ベクトルにする
@@ -591,9 +644,12 @@ void sum_vertical(Tensor &a, Tensor &v) {
 		return;
 	}
 	init_zero(v);
+	#pragma acc kernels present(a, v)
+	#pragma acc loop seq
 	for (ll i=0; i < a.h; i++) {
+		#pragma acc loop independent vector
 		for (ll j=0; j < a.w; j++) {
-			v.val[j] += a.val[i*a.w + j];
+			v[j] += a[i*a.w + j];
 		}
 	}
 }
@@ -607,36 +663,41 @@ void back_sigmoid(Tensor &dz, Tensor &z) {
 		return;
 	}
 
+	#pragma acc kernels present(dz, z)
+	#pragma acc loop independent gang
 	for (ll i=0; i < dz.h; i++) {
+		#pragma acc loop independent vector
 		for (ll j=0; j < dz.w; j++) {
-			dz.val[i*dz.w+j] *= z.val[i*dz.w+j] * (1 - z.val[i*dz.w+j]);
+			dz[i*dz.w+j] *= z[i*dz.w+j] * (1 - z[i*dz.w+j]);
 		}
 	}
 }
 
 double accuracy(Tensor &y, Tensor &t) {
+	y.updateHost();
 	if(y.h != t.h || y.w != t.w) {
 		cout << "Tensor size mismatch in accuracy." << endl;
 		return -1.;
 	}
 	int32_t ymax_idx;
 	int32_t tmax_idx;
-	double ymax_val;
-	double tmax_val;
+	double ymax;
+	double tmax;
 	double acc = 0.;
+
 	for (ll i=0; i < y.h; i++) {
 		ymax_idx = -1;
 		tmax_idx = -1;
-		ymax_val = -1.;
-		tmax_val = -1.;
+		ymax = -1.;
+		tmax = -1.;
 		for (ll j=0; j < y.w; j++) {
-			if (ymax_val < y.val[i*y.w+j]) {
+			if (ymax < y[i*y.w+j]) {
 				ymax_idx = j;
-				ymax_val = y.val[i*y.w+j];
+				ymax = y[i*y.w+j];
 			}
-			if (tmax_val < t.val[i*y.w+j]) {
+			if (tmax < t[i*y.w+j]) {
 				tmax_idx = j;
-				tmax_val = t.val[i*y.w+j];
+				tmax = t[i*y.w+j];
 			}
 		}
 		if (ymax_idx == tmax_idx) {
