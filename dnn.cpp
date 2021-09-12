@@ -5,13 +5,14 @@
 #include <cmath>
 #include <random>
 #include <chrono>
+#include "dnn.hpp"
 
 using namespace std;
 using ll = int64_t;
 
 int32_t batch_size = 100;
 int32_t feature_size1 = 100;
-int32_t iters_num = 1201;
+int32_t iters_num = 9601;
 double learning_rate = 0.1;
 
 
@@ -24,109 +25,6 @@ int32_t label_size;
 #define TandT 3
 
 
-class Tensor
-{
-	private:
-		double* _A{nullptr};
-
-	public:
-
-		int32_t h{0};
-		int32_t w{0};
-		int32_t size{0};
-
-		#pragma acc routine seq
-		double& operator[](size_t idx) { return _A[idx]; };
-		
-		explicit Tensor() { };
-		//コンストラクタでもうgpu側にメモリ領域を確保してしまう
-		explicit Tensor(int32_t height, int32_t width) {
-			h = height; w = width; size = height * width;
-			_A = new double[size];
-			#pragma acc enter data copyin(this)
-			#pragma acc enter data create(_A[0:size])
-		}
-		~Tensor() {
-			#pragma acc exit data delete(_A[0:size])
-			#pragma acc exit data delete(this)
-			delete [] _A;
-			_A = NULL;
-			h = 0; w = 0; size = 0;
-		}
-
-		inline void updateHost() {
-			#pragma acc update self(_A[0:size])
-		}
-		inline void updateDev() {
-			#pragma acc update device(_A[0:size])
-		}
-
-		void Print() {
-			for (ll i=0; i < h; i++) {
-				for (ll j=0; j < w; j++) {
-					cout << _A[i*w+j] << " ";
-				}
-				cout << endl;
-			}
-		}
-		void SetDim(int32_t height, int32_t width) {
-			h = height; w = width; size = height * width;
-			_A = new double[size];
-			#pragma acc enter data copyin(this)
-			#pragma acc enter data create(_A[0:size])
-		}
-		//void FreeVal();
-};
-
-//Tensor::Tensor() {
-	//h = 0; w = 0;
-//}
-//Tensor::Tensor(int32_t height, int32_t width) {
-	//h = height; w = width;
-	//val = (double*)malloc(sizeof(double) * height * width);
-//}
-
-//void Tensor::Print() {
-	//for (ll i=0; i < h; i++) {
-		//for (ll j=0; j < w; j++) {
-			//cout << val[i*w+j] << " ";
-		//}
-		//cout << endl;
-	//}
-//}
-
-//void Tensor::SetDim(int32_t height, int32_t width) {
-	//h = height; w = width;
-	//val = (double*)malloc(sizeof(double) * height * width);
-//}
-
-//void Tensor::FreeVal() {
-	//free(val);
-//}
-
-uint32_t reverseInt (uint32_t i);
-void sigmoid(Tensor &a);
-void relu(Tensor &s, Tensor &t);
-void dot(Tensor &a, Tensor &b, Tensor &c, int32_t TorN);
-void add_bias(Tensor &a, Tensor &b); //aは行列、bはベクトル。aの各行にbを足しこむ
-void scale_sub(Tensor &a, Tensor &b, Tensor &c, double scale); //a-scale*b
-uint32_t reverseInt (uint32_t i);
-void readTrainingFile(string filename, Tensor &images);
-void readLabelFile(string filename, Tensor &label);
-void init_random(Tensor &w);
-void init_zero(Tensor &w);
-void batch_random_choice(Tensor &dataset, Tensor &labelset, Tensor &x, Tensor &t);
-void softmax(Tensor &a);
-double loss(Tensor &y, Tensor &t);
-void div_by_scalar(Tensor &a, double d);
-void sum_vertical(Tensor &a, Tensor &v);
-void back_sigmoid(Tensor &dz, Tensor &z);
-double accuracy(Tensor &y, Tensor &t);
-
-void affine_layer(Tensor &x, Tensor &weight, Tensor &bias, Tensor &z) {
-	dot(x, weight, z, NandN);
-	add_bias(z, bias);
-}
 
 int main() {
 
@@ -273,6 +171,11 @@ int main() {
 	return 0;
 }
 
+void affine_layer(Tensor &x, Tensor &weight, Tensor &bias, Tensor &z) {
+	dot(x, weight, z, NandN);
+	add_bias(z, bias);
+}
+
 void sigmoid(Tensor &a) {
 	#pragma acc kernels present(a)
 	#pragma acc loop independent gang
@@ -414,25 +317,16 @@ void dot(Tensor &a, Tensor &b, Tensor &c, int32_t TorN) {
 	int32_t a_size = a.h*a.w;
 	int32_t b_size = b.h*b.w;
 	int32_t c_size = c.h*c.w;
-	//double *A, *B, *C;
-	//A = a;
-	//B = b;
-	//C = c;
 
-	//a.updateDev();
-	//b.updateDev();
 
 	switch(TorN) {
 		case NandN:
-			//#pragma acc data copyin(a[0:a_size], b[0:b.h*b.w]) copyout(c[0:c.h*c.w])
-			//#pragma acc data copyin(A[0:a_size], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
 			#pragma acc kernels present(a, b, c)
 			#pragma acc loop independent gang
 			for (ll i=0; i < m; i++) {
 				#pragma acc loop independent vector
 				for (ll j=0; j < n; j++) {
 					c[i*n+j] = 0.;
-					//C[i*n+j] = 0.;
 					#pragma acc loop seq
 					for (ll x=0; x < k; x++) {
 						c[i*n+j] += a[i*k+x] * b[x*n+j];
@@ -441,8 +335,6 @@ void dot(Tensor &a, Tensor &b, Tensor &c, int32_t TorN) {
 			}
 			break;
 		case TandN:
-			//#pragma acc data copyin(a[0:a_size], b[0:b.h*b.w]) copyout(c[0:c.h*c.w])
-			//#pragma acc data copyin(A[0:a_size], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
 			#pragma acc kernels present(a, b, c)
 			#pragma acc loop independent gang
 			for (ll i=0; i < m; i++) {
@@ -457,8 +349,6 @@ void dot(Tensor &a, Tensor &b, Tensor &c, int32_t TorN) {
 			}
 			break;
 		case NandT:
-			//#pragma acc data copyin(a[0:a_size], b[0:b.h*b.w]) copyout(c[0:c.h*c.w])
-			//#pragma acc data copyin(A[0:a.h*a.w], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
 			#pragma acc kernels present(a, b, c)
 			#pragma acc loop independent gang
 			for (ll i=0; i < m; i++) {
@@ -473,8 +363,6 @@ void dot(Tensor &a, Tensor &b, Tensor &c, int32_t TorN) {
 			}
 			break;
 		case TandT:
-			//#pragma acc data copyin(a[0:a_size], b[0:b.h*b.w]) copyout(c[0:c.h*c.w])
-			//#pragma acc data copyin(A[0:a.h*a.w], B[0:b.h*b.w]) copyout(C[0:c.h*c.w])
 			#pragma acc kernels present(a, b, c)
 			#pragma acc loop independent gang
 			for (ll i=0; i < m; i++) {
@@ -489,7 +377,6 @@ void dot(Tensor &a, Tensor &b, Tensor &c, int32_t TorN) {
 			}
 			break;
 	}
-	//c.updateHost();
 }
 
 //行列aの各行にベクトルbを足しこむ
@@ -594,18 +481,20 @@ void batch_random_choice(Tensor &dataset, Tensor &labelset, Tensor &x, Tensor &t
 }
 
 void softmax(Tensor &a) {
-	#pragma acc kernels present(a)
+	double max_pxl;
+	double sum_exp;
+	#pragma acc parallel present(a) private(max_pxl, sum_exp)
 	#pragma acc loop independent gang
 	for (ll i=0; i < a.h; i++) {
-		double max_pxl = -1000000.;
-		#pragma acc loop seq
+		max_pxl = -1000000.;
+		#pragma acc loop vector reduction( max : max_pxl )
 		for (ll j=0; j < a.w; j++) {
 			max_pxl = max(max_pxl, a[i*a.w + j]);
 		}
-		double sum_exp = 0.;
+		sum_exp = 0.;
 
 		double exp_a_c;
-		#pragma acc loop seq
+		#pragma acc loop vector reduction( + : sum_exp)
 		for (ll j=0; j < a.w; j++) {
 			exp_a_c = exp(a[i*a.w + j] - max_pxl);
 			a[i*a.w + j] = exp_a_c;
@@ -674,7 +563,6 @@ void back_sigmoid(Tensor &dz, Tensor &z) {
 }
 
 double accuracy(Tensor &y, Tensor &t) {
-	y.updateHost();
 	if(y.h != t.h || y.w != t.w) {
 		cout << "Tensor size mismatch in accuracy." << endl;
 		return -1.;
@@ -685,11 +573,14 @@ double accuracy(Tensor &y, Tensor &t) {
 	double tmax;
 	double acc = 0.;
 
+	#pragma acc parallel present(y, t)
+	#pragma acc loop independent vector
 	for (ll i=0; i < y.h; i++) {
 		ymax_idx = -1;
 		tmax_idx = -1;
 		ymax = -1.;
 		tmax = -1.;
+		#pragma acc loop seq
 		for (ll j=0; j < y.w; j++) {
 			if (ymax < y[i*y.w+j]) {
 				ymax_idx = j;
