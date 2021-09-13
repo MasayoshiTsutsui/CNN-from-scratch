@@ -13,7 +13,7 @@ using ll = int64_t;
 int32_t batch_size = 100;
 int32_t feature_size1 = 100;
 int32_t iters_num = 9601;
-double learning_rate = 0.1;
+float learning_rate = 0.1;
 
 
 int32_t image_size;
@@ -135,14 +135,14 @@ int main() {
 			affine_layer(z1_test, w2, b2, y_test);
 			//dot(z1_test, w2, y_test, NandN);
 			//add(y_test, b2);
-			double acc = accuracy(y_test, test_label);
+			float acc = accuracy(y_test, test_label);
 			cout << "iter " << i << " : " << acc << endl;
 		}
 
 		//逆伝播開始
 		scale_sub(y, t, dy, 1.);
 
-		div_by_scalar(dy, (double)batch_size);
+		div_by_scalar(dy, (float)batch_size);
 
 		//softmax with loss 通過
 		sum_vertical(dy, db2); //db2求める
@@ -234,7 +234,7 @@ void readTrainingFile(string filename, Tensor &images){
 			for(int32_t col = 0; col < cols; col++){
 				unsigned char temp = 0;
 				ifs.read((char*)&temp,sizeof(temp));
-				images[i*rows*cols + row*cols + col] = (double)temp;
+				images[i*rows*cols + row*cols + col] = (float)temp;
 			}
 		}
 	}
@@ -314,10 +314,6 @@ void dot(Tensor &a, Tensor &b, Tensor &c, int32_t TorN) {
 		cout << "tensor size mismatch in dot." << endl << endl;
 		return;
 	}
-	int32_t a_size = a.h*a.w;
-	int32_t b_size = b.h*b.w;
-	int32_t c_size = c.h*c.w;
-
 
 	switch(TorN) {
 		case NandN:
@@ -396,7 +392,7 @@ void add_bias(Tensor &a, Tensor &b) {
 }
 
 //a-scale*bをcに代入
-void scale_sub(Tensor &a, Tensor &b, Tensor &c, double scale) {
+void scale_sub(Tensor &a, Tensor &b, Tensor &c, float scale) {
 	if (a.h != b.h || a.w != b.w || a.h != c.h || a.w != c.w) {
 		cout << "Tensor size mismatch in sub." << endl;
 		return;
@@ -411,7 +407,7 @@ void scale_sub(Tensor &a, Tensor &b, Tensor &c, double scale) {
 	}
 }
 
-void div_by_scalar(Tensor &a, double d) {
+void div_by_scalar(Tensor &a, float d) {
 	#pragma acc kernels present(a)
 	#pragma acc loop independent gang
 	for (ll i=0; i < a.h; i++) {
@@ -434,8 +430,8 @@ void relu(Tensor &s, Tensor &t) {
 }
 
 void init_random(Tensor &w) {
-	double sigma = 0.01;
-	double mean = 0.0;
+	float sigma = 0.01;
+	float mean = 0.0;
 	int32_t height = w.h;
 	int32_t width = w.w;
 	random_device seed_gen;
@@ -481,8 +477,8 @@ void batch_random_choice(Tensor &dataset, Tensor &labelset, Tensor &x, Tensor &t
 }
 
 void softmax(Tensor &a) {
-	double max_pxl;
-	double sum_exp;
+	float max_pxl;
+	float sum_exp;
 	#pragma acc parallel present(a) private(max_pxl, sum_exp)
 	#pragma acc loop independent gang
 	for (ll i=0; i < a.h; i++) {
@@ -493,7 +489,7 @@ void softmax(Tensor &a) {
 		}
 		sum_exp = 0.;
 
-		double exp_a_c;
+		float exp_a_c;
 		#pragma acc loop vector reduction( + : sum_exp)
 		for (ll j=0; j < a.w; j++) {
 			exp_a_c = exp(a[i*a.w + j] - max_pxl);
@@ -562,26 +558,26 @@ void back_sigmoid(Tensor &dz, Tensor &z) {
 	}
 }
 
-double accuracy(Tensor &y, Tensor &t) {
+float accuracy(Tensor &y, Tensor &t) {
 	if(y.h != t.h || y.w != t.w) {
 		cout << "Tensor size mismatch in accuracy." << endl;
 		return -1.;
 	}
 	int32_t ymax_idx;
 	int32_t tmax_idx;
-	double ymax;
-	double tmax;
-	double acc = 0.;
+	float ymax;
+	float tmax;
+	float acc = 0.;
 
 	#pragma acc parallel present(y, t)
-	#pragma acc loop independent vector
-	for (ll i=0; i < y.h; i++) {
+	#pragma acc loop independent vector reduction( + : acc)
+	for (int32_t i=0; i < y.h; i++) {
 		ymax_idx = -1;
 		tmax_idx = -1;
 		ymax = -1.;
 		tmax = -1.;
 		#pragma acc loop seq
-		for (ll j=0; j < y.w; j++) {
+		for (int32_t j=0; j < y.w; j++) {
 			if (ymax < y[i*y.w+j]) {
 				ymax_idx = j;
 				ymax = y[i*y.w+j];

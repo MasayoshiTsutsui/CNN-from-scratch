@@ -6,7 +6,7 @@ using namespace std;
 class Tensor
 {
 	private:
-		double* _A{nullptr};
+		float* _A{nullptr};
 
 	public:
 
@@ -15,13 +15,13 @@ class Tensor
 		int32_t size{0};
 
 		#pragma acc routine seq
-		double& operator[](size_t idx) { return _A[idx]; };
+		float& operator[](size_t idx) { return _A[idx]; };
 		
 		explicit Tensor() { };
 		//コンストラクタでもうgpu側にメモリ領域を確保してしまう
 		explicit Tensor(int32_t height, int32_t width) {
 			h = height; w = width; size = height * width;
-			_A = new double[size];
+			_A = new float[size];
 			#pragma acc enter data copyin(this)
 			#pragma acc enter data create(_A[0:size])
 		}
@@ -50,7 +50,7 @@ class Tensor
 		}
 		void SetDim(int32_t height, int32_t width) {
 			h = height; w = width; size = height * width;
-			_A = new double[size];
+			_A = new float[size];
 			#pragma acc enter data copyin(this)
 			#pragma acc enter data create(_A[0:size])
 		}
@@ -61,7 +61,7 @@ void sigmoid(Tensor &a);
 void relu(Tensor &s, Tensor &t);
 void dot(Tensor &a, Tensor &b, Tensor &c, int32_t TorN);
 void add_bias(Tensor &a, Tensor &b); //aは行列、bはベクトル。aの各行にbを足しこむ
-void scale_sub(Tensor &a, Tensor &b, Tensor &c, double scale); //a-scale*b
+void scale_sub(Tensor &a, Tensor &b, Tensor &c, float scale); //a-scale*b
 uint32_t reverseInt (uint32_t i);
 void readTrainingFile(string filename, Tensor &images);
 void readLabelFile(string filename, Tensor &label);
@@ -70,8 +70,8 @@ void init_zero(Tensor &w);
 void batch_random_choice(Tensor &dataset, Tensor &labelset, Tensor &x, Tensor &t);
 void softmax(Tensor &a);
 double loss(Tensor &y, Tensor &t);
-void div_by_scalar(Tensor &a, double d);
+void div_by_scalar(Tensor &a, float d);
 void sum_vertical(Tensor &a, Tensor &v);
 void back_sigmoid(Tensor &dz, Tensor &z);
-double accuracy(Tensor &y, Tensor &t);
+float accuracy(Tensor &y, Tensor &t);
 void affine_layer(Tensor &x, Tensor &weight, Tensor &bias, Tensor &z);
