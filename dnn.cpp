@@ -107,8 +107,6 @@ int main() {
 
 	cout << "test accuracy in ..." << endl;
 
-	//#pragma acc data copyin(test_data.val[0:test_data.h*test_data.w], w1.val[0:w1.h*w1.w], w2.val[0:w2.h*w2.w], b1.val[0:b1.h*b1.w], b2.val[0:b2.h*b2.w])
-	//#pragma acc data create(x.val[0:x.h*x.w], t.val[0:t.h*t.w], dw1.val[0:dw1.h*dw1.w], db1.val[0:db1.h*db1.w], z1.val[0:z1.h*z1.w], dz1.val[0:dz1.h*dz1.w], z1_test.val[0:z1_test.h*z1_test.w], dw2.val[0:dw2.h*dw2.w], db2.val[0:db2.h*db2.w], y.val[0:y.h*y.w], dy.val[0:dy.h*dy.w], y_test.val[0:y_test.h*y_test.w])
 
 	for (ll i=0; i < iters_num; i++) {
 		batch_random_choice(train_data, train_label, x, t);
@@ -116,25 +114,16 @@ int main() {
 		t.updateDev();
 		//順伝播開始
 		affine_layer(x, w1, b1, z1);
-		//dot(x, w1, z1, NandN);
-
-		//add(z1, b1);
 		sigmoid(z1);
 		affine_layer(z1, w2, b2, y);
-		//dot(z1, w2, y, NandN);
-		//add(y, b2);
 		softmax(y);
 		//lossval = loss(y, t);
 		//順伝播終了
 
 		if (i % iter_per_epoch == 0) {
 			affine_layer(test_data, w1, b1, z1_test);
-			//dot(test_data, w1, z1_test, NandN);
-			//add(z1_test, b1);
 			sigmoid(z1_test);
 			affine_layer(z1_test, w2, b2, y_test);
-			//dot(z1_test, w2, y_test, NandN);
-			//add(y_test, b2);
 			float acc = accuracy(y_test, test_label);
 			cout << "iter " << i << " : " << acc << endl;
 		}
@@ -225,10 +214,8 @@ void readTrainingFile(string filename, Tensor &images){
 
 	images.SetDim(number_of_images, rows*cols);
 
-	//cout << magic_number << " " << number_of_images << " " << rows << " " << cols << endl;
 
 	for(int32_t i = 0; i < number_of_images; i++){
-		//images[i].resize(rows * cols);
 
 		for(int32_t row = 0; row < rows; row++){
 			for(int32_t col = 0; col < cols; col++){
@@ -259,7 +246,6 @@ void readLabelFile(string filename, Tensor &label){
 
 	label.SetDim(number_of_images, 10);
 
-	//cout << number_of_images << endl;
 
 	init_zero(label);
 
