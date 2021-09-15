@@ -1,60 +1,99 @@
 #include <mma.h>
 #include <cuda_fp16.h>
 #include <iostream>
+
+#define WARPSIZE 32
+#define TILESIZE 16
+#define ELEMS_TILE 256
+#define TILEDIM_BLOCK 2 //1blockあたり、16*16の小行列タイルを2*2個生成する
+#define TILES_BLOCK 4
 using namespace std;
 using namespace nvcuda;
 
+//128スレッド4warpで起動されることを想定。2*2のタイルを1blockで計算
+//タイルできれいに分割できない行列は未対応
 __global__
-void dot_TensorCore(float *a, float *b, float *c) {
+void dot_TensorCore(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k) {
 
-	__shared__ __half a_half[257] __align__(32);
-	__shared__ __half b_half[258] __align__(32);
-	__shared__ __half c_half[259] __align__(32);
+	__shared__ __half a_half[ELEMS_TILE*TILES_BLOCK] __align__(32);
+	__shared__ __half b_half[ELEMS_TILE*TILES_BLOCK] __align__(32);
+	__shared__ __half c_half[ELEMS_TILE*TILES_BLOCK] __align__(32);
 
-	int32_t tid = threadIdx.x;
+	int32_t lid = threadIdx.x % WARPSIZE;
+	int32_t lid_hex = lid % 16;
+	int32_t hexid = lid / 16;
+	int32_t wid = threadIdx.x / WARPSIZE;
+	int32_t tileIdx_x = blockIdx.x * TILEDIM_BLOCK + wid % 2; // 自スレッドがcのx軸方向何枚目のタイル生成担当か
+	int32_t tileIdx_y = blockIdx.y * TILEDIM_BLOCK + wid / 2; // 自スレッドがcのy軸以下略
 
-	wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> a_frag;
-	wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::row_major> b_frag;
-	wmma::fragment<wmma::accumulator, 16, 16, 16, __half> c_frag;
+	wmma::fragment<wmma::matrix_a, TILESIZE, TILESIZE, TILESIZE, __half, wmma::row_major> a_frag;
+	wmma::fragment<wmma::matrix_b, TILESIZE, TILESIZE, TILESIZE, __half, wmma::row_major> b_frag;
+	wmma::fragment<wmma::accumulator, TILESIZE, TILESIZE, TILESIZE, __half> c_frag;
 
 	wmma::fill_fragment(c_frag, __float2half(0.f));
+	for (int32_t i=0; i < k / TILESIZE; i++) {
+		//a,bの中でのタイルの先頭要素のidx
+		int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE;
+		//16*16*16でやろうとしてるので、tidが0~15の担当要素、16~31の担当要素は隔たりがある
+		//1回で小行列の2行分をa_halfに。
+		a_half[wid*ELEMS_TILE + lid] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+		a_offsetbase += 2 * k; //2行下に移動
+		a_half[wid*ELEMS_TILE + lid+32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+		a_offsetbase += 2 * k;
+		a_half[wid*ELEMS_TILE + lid+64] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+		a_offsetbase += 2 * k;
+		a_half[wid*ELEMS_TILE + lid+96] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+		a_offsetbase += 2 * k;
+		a_half[wid*ELEMS_TILE + lid+128] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+		a_offsetbase += 2 * k;
+		a_half[wid*ELEMS_TILE + lid+160] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+		a_offsetbase += 2 * k;
+		a_half[wid*ELEMS_TILE + lid+192] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+		a_offsetbase += 2 * k;
+		a_half[wid*ELEMS_TILE + lid+224] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
 
-	a_half[tid] = __float2half(a[tid]);
-	a_half[tid+32] = __float2half(a[tid+32]);
-	a_half[tid+64] = __float2half(a[tid+64]);
-	a_half[tid+96] = __float2half(a[tid+96]);
-	a_half[tid+128] = __float2half(a[tid+128]);
-	a_half[tid+160] = __float2half(a[tid+160]);
-	a_half[tid+192] = __float2half(a[tid+192]);
-	a_half[tid+224] = __float2half(a[tid+224]);
-	b_half[tid] = __float2half(b[tid]);
-	b_half[tid+32] = __float2half(b[tid+32]);
-	b_half[tid+64] = __float2half(b[tid+64]);
-	b_half[tid+96] = __float2half(b[tid+96]);
-	b_half[tid+128] = __float2half(b[tid+128]);
-	b_half[tid+160] = __float2half(b[tid+160]);
-	b_half[tid+192] = __float2half(b[tid+192]);
-	b_half[tid+224] = __float2half(b[tid+224]);
+		int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
+		b_half[wid*ELEMS_TILE + lid] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+		b_offsetbase += 2 * n;
+		b_half[wid*ELEMS_TILE + lid+32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+		b_offsetbase += 2 * n;
+		b_half[wid*ELEMS_TILE + lid+64] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+		b_offsetbase += 2 * n;
+		b_half[wid*ELEMS_TILE + lid+96] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+		b_offsetbase += 2 * n;
+		b_half[wid*ELEMS_TILE + lid+128] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+		b_offsetbase += 2 * n;
+		b_half[wid*ELEMS_TILE + lid+160] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+		b_offsetbase += 2 * n;
+		b_half[wid*ELEMS_TILE + lid+192] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+		b_offsetbase += 2 * n;
+		b_half[wid*ELEMS_TILE + lid+224] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+		wmma::load_matrix_sync(a_frag, &a_half[wid*ELEMS_TILE], 16);
+		wmma::load_matrix_sync(b_frag, &b_half[wid*ELEMS_TILE], 16);
+		wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
+	}
 
-	wmma::load_matrix_sync(a_frag, a_half, 16);
-	wmma::load_matrix_sync(b_frag, b_half, 16);
-
-	wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
-
-	wmma::store_matrix_sync(c_half, c_frag, 16, wmma::mem_row_major);
-
-	c[tid] = __half2float(c_half[tid]);
-	c[tid+32] = __half2float(c_half[tid+32]);
-	c[tid+64] = __half2float(c_half[tid+64]);
-	c[tid+96] = __half2float(c_half[tid+96]);
-	c[tid+128] = __half2float(c_half[tid+128]);
-	c[tid+160] = __half2float(c_half[tid+160]);
-	c[tid+192] = __half2float(c_half[tid+192]);
-	c[tid+224] = __half2float(c_half[tid+224]);
+	wmma::store_matrix_sync(&c_half[wid*ELEMS_TILE], c_frag, 16, wmma::mem_row_major);
+	int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
+	c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid]);
+	c_offsetbase += 2 * n;
+	c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid+32]);
+	c_offsetbase += 2 * n;
+	c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid+64]);
+	c_offsetbase += 2 * n;
+	c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid+96]);
+	c_offsetbase += 2 * n;
+	c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid+128]);
+	c_offsetbase += 2 * n;
+	c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid+160]);
+	c_offsetbase += 2 * n;
+	c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid+192]);
+	c_offsetbase += 2 * n;
+	c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid+224]);
 }
 
 int main() {
-	int32_t n = 16;
+	int32_t n = 32;
 	int32_t matsize = n * n;
 	float *a, *b, *c;
 	float *a_dev, *b_dev, *c_dev;
@@ -67,15 +106,15 @@ int main() {
 	cudaMalloc((void**)&c_dev, sizeof(float) * matsize);
 	for (int32_t i=0; i < matsize; i++) {
 		a[i] = 1.;
-		b[i] = 0.;
+		b[i] = 1.;
 		c[i] = 0.;
 	}
-	for (int32_t i=0; i < n; i++) {
-		b[i] = 1.;
-	}
+	//for (int32_t i=0; i < n; i++) {
+		//b[i] = 1.;
+	//}
 	cudaMemcpy(a_dev, a, sizeof(float)*matsize, cudaMemcpyHostToDevice);
 	cudaMemcpy(b_dev, b, sizeof(float)*matsize, cudaMemcpyHostToDevice);
-	dot_TensorCore<<<1, 32>>>(a_dev,  b_dev, c_dev);
+	dot_TensorCore<<<1, 128>>>(a_dev,  b_dev, c_dev, n, n, n);
 	cudaMemcpy(c, c_dev, sizeof(float)*matsize, cudaMemcpyDeviceToHost);
 	for (int32_t i=0; i < n; i++) {
 		for (int32_t j=0; j < n; j++) {
