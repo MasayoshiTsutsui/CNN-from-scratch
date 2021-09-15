@@ -6,20 +6,18 @@ using namespace nvcuda;
 
 __global__
 void dot_TensorCore(float *a, float *b, float *c) {
-	int32_t a_ldm = 16;
-	int32_t b_ldm = 16;
+
+	__shared__ __half a_half[257] __align__(32);
+	__shared__ __half b_half[258] __align__(32);
+	__shared__ __half c_half[259] __align__(32);
+
+	int32_t tid = threadIdx.x;
 
 	wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> a_frag;
 	wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::row_major> b_frag;
 	wmma::fragment<wmma::accumulator, 16, 16, 16, __half> c_frag;
 
 	wmma::fill_fragment(c_frag, __float2half(0.f));
-	
-	__shared__ __half a_half[256] __align__(32);
-	__shared__ __half b_half[256] __align__(32);
-	__shared__ __half c_half[256] __align__(32);
-
-	int32_t tid = threadIdx.x;
 
 	a_half[tid] = __float2half(a[tid]);
 	a_half[tid+32] = __float2half(a[tid+32]);
@@ -37,24 +35,22 @@ void dot_TensorCore(float *a, float *b, float *c) {
 	b_half[tid+160] = __float2half(b[tid+160]);
 	b_half[tid+192] = __float2half(b[tid+192]);
 	b_half[tid+224] = __float2half(b[tid+224]);
-	//c_half[tid] = __float2half(1.f);
-	__syncthreads();
-	printf("share :: tid:%d, %f, %f, %f\n",tid, __half2float(a_half[tid]), __half2float(b_half[tid]), __half2float(c_half[tid]));
 
-	a_frag.x[0] = __float2half(-1.f);
-	printf("before load :: tid:%d, %f\n", tid, __half2float(a_frag.x[0]));
-	wmma::load_matrix_sync(a_frag, a_half, a_ldm);
-	printf("after load :: tid:%d, %f\n", tid, __half2float(a_frag.x[0]));
-
-	wmma::load_matrix_sync(b_frag, b_half, b_ldm);
+	wmma::load_matrix_sync(a_frag, a_half, 16);
+	wmma::load_matrix_sync(b_frag, b_half, 16);
 
 	wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
 
 	wmma::store_matrix_sync(c_half, c_frag, 16, wmma::mem_row_major);
 
 	c[tid] = __half2float(c_half[tid]);
-	printf("last :: tid:%d, %f\n", tid, c[tid]);
-	
+	c[tid+32] = __half2float(c_half[tid+32]);
+	c[tid+64] = __half2float(c_half[tid+64]);
+	c[tid+96] = __half2float(c_half[tid+96]);
+	c[tid+128] = __half2float(c_half[tid+128]);
+	c[tid+160] = __half2float(c_half[tid+160]);
+	c[tid+192] = __half2float(c_half[tid+192]);
+	c[tid+224] = __half2float(c_half[tid+224]);
 }
 
 int main() {
@@ -70,9 +66,12 @@ int main() {
 	cudaMalloc((void**)&b_dev, sizeof(float) * matsize);
 	cudaMalloc((void**)&c_dev, sizeof(float) * matsize);
 	for (int32_t i=0; i < matsize; i++) {
-		a[i] = (float)i;
-		b[i] = (float)i;
-		c[i] = 0.f;
+		a[i] = 1.;
+		b[i] = 0.;
+		c[i] = 0.;
+	}
+	for (int32_t i=0; i < n; i++) {
+		b[i] = 1.;
 	}
 	cudaMemcpy(a_dev, a, sizeof(float)*matsize, cudaMemcpyHostToDevice);
 	cudaMemcpy(b_dev, b, sizeof(float)*matsize, cudaMemcpyHostToDevice);
