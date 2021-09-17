@@ -35,109 +35,177 @@ void dot_TensorCore(float *a, float *b, float *c, int32_t m, int32_t n, int32_t 
 
 	wmma::fill_fragment(c_frag, __float2half(0.f));
 	//16*16*16で分割した時にはみ出た部分も余分に計算するために、iの終点を工夫
-	for (int32_t i=0; i < (k-1) / TILESIZE + 1; i++) {
-		if ((i+1) * TILESIZE <= k) { //処理しようとしているタイルがa,bの中に収まっているとき
-			//a,bの中でのタイルの先頭要素のidx
-			int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE;
-			//16*16*16でやろうとしてるので、tidが0~15の担当要素、16~31の担当要素は隔たりがある
-			//1回で小行列の2行分をa_halfに。
-			a_half[wid*ELEMS_TILE + lid] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-			a_offsetbase += 2 * k; //2行下に移動
-			a_half[wid*ELEMS_TILE + lid+32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-			a_offsetbase += 2 * k;
-			a_half[wid*ELEMS_TILE + lid+64] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-			a_offsetbase += 2 * k;
-			a_half[wid*ELEMS_TILE + lid+96] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-			a_offsetbase += 2 * k;
-			a_half[wid*ELEMS_TILE + lid+128] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-			a_offsetbase += 2 * k;
-			a_half[wid*ELEMS_TILE + lid+160] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-			a_offsetbase += 2 * k;
-			a_half[wid*ELEMS_TILE + lid+192] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-			a_offsetbase += 2 * k;
-			a_half[wid*ELEMS_TILE + lid+224] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
 
-			int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
-			b_half[wid*ELEMS_TILE + lid] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-			b_offsetbase += 2 * n;
-			b_half[wid*ELEMS_TILE + lid+32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-			b_offsetbase += 2 * n;
-			b_half[wid*ELEMS_TILE + lid+64] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-			b_offsetbase += 2 * n;
-			b_half[wid*ELEMS_TILE + lid+96] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-			b_offsetbase += 2 * n;
-			b_half[wid*ELEMS_TILE + lid+128] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-			b_offsetbase += 2 * n;
-			b_half[wid*ELEMS_TILE + lid+160] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-			b_offsetbase += 2 * n;
-			b_half[wid*ELEMS_TILE + lid+192] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-			b_offsetbase += 2 * n;
-			b_half[wid*ELEMS_TILE + lid+224] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-		}
-		else { //このループで最後に16*16のタイル分割時にa,bからはみ出してしまった時
-			if (i * TILESIZE + lid_hex < k) { //ギリギリはみ出してないところ担当のthread
-				int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE;
-				//16*16*16でやろうとしてるので、tidが0~15の担当要素、16~31の担当要素は隔たりがある
-				//1回で小行列の2行分をa_halfに。
-				a_half[wid*ELEMS_TILE + lid] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-				a_offsetbase += 2 * k; //2行下に移動
-				a_half[wid*ELEMS_TILE + lid+32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-				a_offsetbase += 2 * k;
-				a_half[wid*ELEMS_TILE + lid+64] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-				a_offsetbase += 2 * k;
-				a_half[wid*ELEMS_TILE + lid+96] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-				a_offsetbase += 2 * k;
-				a_half[wid*ELEMS_TILE + lid+128] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-				a_offsetbase += 2 * k;
-				a_half[wid*ELEMS_TILE + lid+160] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-				a_offsetbase += 2 * k;
-				a_half[wid*ELEMS_TILE + lid+192] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-				a_offsetbase += 2 * k;
-				a_half[wid*ELEMS_TILE + lid+224] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
-			}
-			else { //はみ出してるところ担当のthread
-				a_half[wid*ELEMS_TILE + lid] = __float2half(0.);
-				a_half[wid*ELEMS_TILE + lid+32] = __float2half(0.);
-				a_half[wid*ELEMS_TILE + lid+64] = __float2half(0.);
-				a_half[wid*ELEMS_TILE + lid+96] = __float2half(0.);
-				a_half[wid*ELEMS_TILE + lid+128] = __float2half(0.);
-				a_half[wid*ELEMS_TILE + lid+160] = __float2half(0.);
-				a_half[wid*ELEMS_TILE + lid+192] = __float2half(0.);
-				a_half[wid*ELEMS_TILE + lid+224] = __float2half(0.);
-			}
-			if (i * TILESIZE + hexid < k) {
-				int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
-				b_half[wid*ELEMS_TILE + lid] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-				b_offsetbase += 2 * n;
-				b_half[wid*ELEMS_TILE + lid+32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-				b_offsetbase += 2 * n;
-				b_half[wid*ELEMS_TILE + lid+64] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-				b_offsetbase += 2 * n;
-				b_half[wid*ELEMS_TILE + lid+96] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-				b_offsetbase += 2 * n;
-				b_half[wid*ELEMS_TILE + lid+128] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-				b_offsetbase += 2 * n;
-				b_half[wid*ELEMS_TILE + lid+160] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-				b_offsetbase += 2 * n;
-				b_half[wid*ELEMS_TILE + lid+192] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-				b_offsetbase += 2 * n;
-				b_half[wid*ELEMS_TILE + lid+224] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
-			}
-			else {
-				b_half[wid*ELEMS_TILE + lid] = __float2half(0.);
-				b_half[wid*ELEMS_TILE + lid+32] = __float2half(0.);
-				b_half[wid*ELEMS_TILE + lid+64] = __float2half(0.);
-				b_half[wid*ELEMS_TILE + lid+96] = __float2half(0.);
-				b_half[wid*ELEMS_TILE + lid+128] = __float2half(0.);
-				b_half[wid*ELEMS_TILE + lid+160] = __float2half(0.);
-				b_half[wid*ELEMS_TILE + lid+192] = __float2half(0.);
-				b_half[wid*ELEMS_TILE + lid+224] = __float2half(0.);
+	if (tileIdx_y * TILESIZE <= m && tileIdx_x * TILESIZE <= n) { //そもそもcの完全に外に行っているタイルは計算しない
+
+		if(((tileIdx_y + 1) * TILESIZE > m) && ((tileIdx_x + 1) * TILESIZE > n)) { //担当するcのタイルが下にも右にもcからはみ出しているとき
+
+			for (int32_t i=0; i < (k-1) / TILESIZE + 1; i++) {
+				if ((i+1) * TILESIZE <= k) { //処理しようとしているタイルがa,bの中に(k方向には)収まっているとき
+
+					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
+					for (int32_t j=0; j < TILESIZE / 2; j++) {
+						if (tileIdx_y * TILESIZE + 2*j + hexid < m) { //自スレッドが処理中の行が、まだaの中に収まってる場合は、aからデータをload
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+						}
+						else { //aに収まってない場合は0埋め
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
+						}
+						a_offsetbase += 2 * k; //2行下に移動
+					}
+
+					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
+					for (int32_t j=0; j < TILESIZE / 2; j++) {
+						if (tileIdx_x * TILESIZE + lid_hex < n) { //自スレッドが処理中の列が、まだbの中に収まってる場合は、bからデータをload
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+						}
+						else { //bに収まってない場合は0埋め
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
+						}
+						b_offsetbase += 2 * n; //2行下に移動
+					}
+				}
+				else { //ループの最後でa,bから(k方向に)はみ出してしまった時
+					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
+					for (int32_t j=0; j < TILESIZE / 2; j++) {
+						if ((tileIdx_y * TILESIZE + 2*j + hexid < m) && (i * TILESIZE + lid_hex < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだaの中に収まってる場合は、aからデータをload
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+						}
+						else { //aに収まってない場合は0埋め
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
+						}
+						a_offsetbase += 2 * k; //2行下に移動
+					}
+
+					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
+					for (int32_t j=0; j < TILESIZE / 2; j++) {
+						if ((tileIdx_x * TILESIZE + lid_hex < n) && (i * TILESIZE + 2*j + hexid < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだaの中に収まってる場合は、bからデータをload
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+						}
+						else { //bに収まってない場合は0埋め
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
+						}
+						b_offsetbase += 2 * n; //2行下に移動
+					}
+				}
 			}
 		}
-		wmma::load_matrix_sync(a_frag, &a_half[wid*ELEMS_TILE], 16);
-		wmma::load_matrix_sync(b_frag, &b_half[wid*ELEMS_TILE], 16);
-		wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
+		else if ((tileIdx_y + 1) * TILESIZE > m) { //担当するcのタイルが下にだけはみ出している
+			//todo
+		}
+		else if ((tileIdx_x + 1) * TILESIZE > n) { //右にだけはみ出している
+			//todo
+		}
+		else { //はみ出してない
+			for (int32_t i=0; i < (k-1) / TILESIZE + 1; i++) {
+				if ((i+1) * TILESIZE <= k) { //処理しようとしているタイルがa,bの中に収まっているとき
+					//a,bの中でのタイルの先頭要素のidx
+					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE;
+					//16*16*16でやろうとしてるので、tidが0~15の担当要素、16~31の担当要素は隔たりがある
+					//1回で小行列の2行分をa_halfに。
+					a_half[wid*ELEMS_TILE + lid] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+					a_offsetbase += 2 * k; //2行下に移動
+					a_half[wid*ELEMS_TILE + lid+32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+					a_offsetbase += 2 * k;
+					a_half[wid*ELEMS_TILE + lid+64] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+					a_offsetbase += 2 * k;
+					a_half[wid*ELEMS_TILE + lid+96] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+					a_offsetbase += 2 * k;
+					a_half[wid*ELEMS_TILE + lid+128] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+					a_offsetbase += 2 * k;
+					a_half[wid*ELEMS_TILE + lid+160] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+					a_offsetbase += 2 * k;
+					a_half[wid*ELEMS_TILE + lid+192] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+					a_offsetbase += 2 * k;
+					a_half[wid*ELEMS_TILE + lid+224] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+
+					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
+					b_half[wid*ELEMS_TILE + lid] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+					b_offsetbase += 2 * n;
+					b_half[wid*ELEMS_TILE + lid+32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+					b_offsetbase += 2 * n;
+					b_half[wid*ELEMS_TILE + lid+64] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+					b_offsetbase += 2 * n;
+					b_half[wid*ELEMS_TILE + lid+96] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+					b_offsetbase += 2 * n;
+					b_half[wid*ELEMS_TILE + lid+128] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+					b_offsetbase += 2 * n;
+					b_half[wid*ELEMS_TILE + lid+160] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+					b_offsetbase += 2 * n;
+					b_half[wid*ELEMS_TILE + lid+192] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+					b_offsetbase += 2 * n;
+					b_half[wid*ELEMS_TILE + lid+224] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+				}
+				else { //このループで最後に16*16のタイル分割時にa,bからはみ出してしまった時
+					if (i * TILESIZE + lid_hex < k) { //ギリギリはみ出してないところ担当のthread
+						int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE;
+						//16*16*16でやろうとしてるので、tidが0~15の担当要素、16~31の担当要素は隔たりがある
+						//1回で小行列の2行分をa_halfに。
+						a_half[wid*ELEMS_TILE + lid] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+						a_offsetbase += 2 * k; //2行下に移動
+						a_half[wid*ELEMS_TILE + lid+32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+						a_offsetbase += 2 * k;
+						a_half[wid*ELEMS_TILE + lid+64] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+						a_offsetbase += 2 * k;
+						a_half[wid*ELEMS_TILE + lid+96] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+						a_offsetbase += 2 * k;
+						a_half[wid*ELEMS_TILE + lid+128] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+						a_offsetbase += 2 * k;
+						a_half[wid*ELEMS_TILE + lid+160] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+						a_offsetbase += 2 * k;
+						a_half[wid*ELEMS_TILE + lid+192] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+						a_offsetbase += 2 * k;
+						a_half[wid*ELEMS_TILE + lid+224] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+					}
+					else { //はみ出してるところ担当のthread
+						a_half[wid*ELEMS_TILE + lid] = __float2half(0.);
+						a_half[wid*ELEMS_TILE + lid+32] = __float2half(0.);
+						a_half[wid*ELEMS_TILE + lid+64] = __float2half(0.);
+						a_half[wid*ELEMS_TILE + lid+96] = __float2half(0.);
+						a_half[wid*ELEMS_TILE + lid+128] = __float2half(0.);
+						a_half[wid*ELEMS_TILE + lid+160] = __float2half(0.);
+						a_half[wid*ELEMS_TILE + lid+192] = __float2half(0.);
+						a_half[wid*ELEMS_TILE + lid+224] = __float2half(0.);
+					}
+					if (i * TILESIZE + hexid < k) {
+						int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
+						b_half[wid*ELEMS_TILE + lid] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+						b_offsetbase += 2 * n;
+						b_half[wid*ELEMS_TILE + lid+32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+						b_offsetbase += 2 * n;
+						b_half[wid*ELEMS_TILE + lid+64] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+						b_offsetbase += 2 * n;
+						b_half[wid*ELEMS_TILE + lid+96] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+						b_offsetbase += 2 * n;
+						b_half[wid*ELEMS_TILE + lid+128] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+						b_offsetbase += 2 * n;
+						b_half[wid*ELEMS_TILE + lid+160] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+						b_offsetbase += 2 * n;
+						b_half[wid*ELEMS_TILE + lid+192] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+						b_offsetbase += 2 * n;
+						b_half[wid*ELEMS_TILE + lid+224] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+					}
+					else {
+						b_half[wid*ELEMS_TILE + lid] = __float2half(0.);
+						b_half[wid*ELEMS_TILE + lid+32] = __float2half(0.);
+						b_half[wid*ELEMS_TILE + lid+64] = __float2half(0.);
+						b_half[wid*ELEMS_TILE + lid+96] = __float2half(0.);
+						b_half[wid*ELEMS_TILE + lid+128] = __float2half(0.);
+						b_half[wid*ELEMS_TILE + lid+160] = __float2half(0.);
+						b_half[wid*ELEMS_TILE + lid+192] = __float2half(0.);
+						b_half[wid*ELEMS_TILE + lid+224] = __float2half(0.);
+					}
+				}
+				wmma::load_matrix_sync(a_frag, &a_half[wid*ELEMS_TILE], 16);
+				wmma::load_matrix_sync(b_frag, &b_half[wid*ELEMS_TILE], 16);
+				wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
+			}
+
+		}
+
+
 	}
+
 	wmma::store_matrix_sync(&c_half[wid*ELEMS_TILE], c_frag, 16, wmma::mem_row_major);
 	int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
 	c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid]);
