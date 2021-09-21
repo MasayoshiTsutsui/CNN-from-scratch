@@ -24,6 +24,8 @@ int32_t label_size;
 #define NandT 2
 #define TandT 3
 
+extern void dotTC_invoker(Tensor a, Tensor b, Tensor c, int32_t m, int32_t n, int32_t k, int32_t TorN);
+
 
 
 int main() {
@@ -136,12 +138,12 @@ int main() {
 		//softmax with loss 通過
 		sum_vertical(dy, db2); //db2求める
 
-		dot(z1, dy, dw2, TandN); //dw2求める
-		dot(dy, w2, dz1, NandT); //dz1求める.sigmoidより右
+		dotTC(z1, dy, dw2, TandN); //dw2求める
+		dotTC(dy, w2, dz1, NandT); //dz1求める.sigmoidより右
 
 		back_sigmoid(dz1, z1); //sigmoidを後方通過
 		sum_vertical(dz1, db1); //db1求める
-		dot(x, dz1, dw1, TandN); //dw2求める
+		dotTC(x, dz1, dw1, TandN); //dw2求める
 
 		scale_sub(b2, db2, b2, learning_rate); //b2更新
 		scale_sub(z1, dz1, z1, learning_rate); //z1更新
@@ -161,7 +163,7 @@ int main() {
 }
 
 void affine_layer(Tensor &x, Tensor &weight, Tensor &bias, Tensor &z) {
-	dot(x, weight, z, NandN);
+	dotTC(x, weight, z, NandN);
 	add_bias(z, bias);
 }
 
@@ -260,6 +262,37 @@ void readLabelFile(string filename, Tensor &label){
 	}
 }
 
+void dotTC(Tensor &a, Tensor &b, Tensor &c, int32_t TorN) {
+	int32_t m, k, k_, n;
+	switch(TorN) {
+		case NandN:
+			m = a.h; k = a.w; k_ = b.h; n = b.w;
+			break;
+		case TandN:
+			m = a.w; k = a.h; k_ = b.h; n = b.w;
+			break;
+		case NandT:
+			m = a.h; k = a.w; k_ = b.w; n = b.h;
+			break;
+		case TandT:
+			m = a.w; k = a.h; k_ = b.w; n = b.h;
+			break;
+		default:
+			cout << "Transpose error in dotTC_invoker." << endl;
+			return;
+	}
+
+	if (k != k_ || m != c.h || n != c.w) {
+		cout << "tensor size mismatch in dotTC_invoker." << endl << endl;
+		return;
+	}
+
+	#pragma acc host_data use_device(a, b, c)
+	{
+		dotTC_invoker(a, b, c, m, n, k, TorN);
+	}
+
+}
 // m*k & k_*n matrix multiplication
 //TorNは転置指定子
 void dot(Tensor &a, Tensor &b, Tensor &c, int32_t TorN) {

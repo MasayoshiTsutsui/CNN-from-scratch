@@ -3,56 +3,58 @@
 using ll = int64_t;
 using namespace std;
 
+#define NandN 0
+#define TandN 1
+#define NandT 2
+#define TandT 3
+
 class Tensor
 {
-	private:
-		float* _A{nullptr};
-
 	public:
-
+		float* ptr{nullptr};
 		int32_t h{0};
 		int32_t w{0};
 		int32_t size{0};
 
 		#pragma acc routine seq
-		float& operator[](size_t idx) { return _A[idx]; };
+		float& operator[](size_t idx) { return ptr[idx]; };
 		
 		explicit Tensor() { };
 		//コンストラクタでもうgpu側にメモリ領域を確保してしまう
 		explicit Tensor(int32_t height, int32_t width) {
 			h = height; w = width; size = height * width;
-			_A = new float[size];
+			ptr = new float[size];
 			#pragma acc enter data copyin(this)
-			#pragma acc enter data create(_A[0:size])
+			#pragma acc enter data create(ptr[0:size])
 		}
 		~Tensor() {
-			#pragma acc exit data delete(_A[0:size])
+			#pragma acc exit data delete(ptr[0:size])
 			#pragma acc exit data delete(this)
-			delete [] _A;
-			_A = NULL;
+			delete [] ptr;
+			ptr = NULL;
 			h = 0; w = 0; size = 0;
 		}
 
 		inline void updateHost() {
-			#pragma acc update self(_A[0:size])
+			#pragma acc update self(ptr[0:size])
 		}
 		inline void updateDev() {
-			#pragma acc update device(_A[0:size])
+			#pragma acc update device(ptr[0:size])
 		}
 
 		void Print() {
 			for (ll i=0; i < h; i++) {
 				for (ll j=0; j < w; j++) {
-					cout << _A[i*w+j] << " ";
+					cout << ptr[i*w+j] << " ";
 				}
 				cout << endl;
 			}
 		}
 		void SetDim(int32_t height, int32_t width) {
 			h = height; w = width; size = height * width;
-			_A = new float[size];
+			ptr = new float[size];
 			#pragma acc enter data copyin(this)
-			#pragma acc enter data create(_A[0:size])
+			#pragma acc enter data create(ptr[0:size])
 		}
 };
 
@@ -75,3 +77,4 @@ void sum_vertical(Tensor &a, Tensor &v);
 void back_sigmoid(Tensor &dz, Tensor &z);
 float accuracy(Tensor &y, Tensor &t);
 void affine_layer(Tensor &x, Tensor &weight, Tensor &bias, Tensor &z);
+void dotTC(Tensor &a, Tensor &b, Tensor &c, int32_t TorN);
