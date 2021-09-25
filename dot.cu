@@ -14,7 +14,7 @@ using namespace nvcuda;
 //128スレッド4warpで起動されることを想定。2*2のタイルを1blockで計算
 //タイルできれいに分割できない行列は未対応
 __global__
-void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k) {
+void dot_TC_NandN(Tensor &a, Tensor &b, Tensor &c, int32_t m, int32_t n, int32_t k) {
 
 	//a,b,cでは、小行列の要素が16個ごとにしか連続していない
 	//shared memoryには、a,b,cから切り出した部分小行列の各要素が連続して並んでいる状況にする
@@ -48,7 +48,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (tileIdx_y * TILESIZE + 2*j + hexid < m) { //自スレッドが処理中の行が、まだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -59,7 +59,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (tileIdx_x * TILESIZE + lid_hex < n) { //自スレッドが処理中の列が、まだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -71,7 +71,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if ((tileIdx_y * TILESIZE + 2*j + hexid < m) && (i * TILESIZE + lid_hex < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -82,7 +82,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if ((tileIdx_x * TILESIZE + lid_hex < n) && (i * TILESIZE + 2*j + hexid < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -99,7 +99,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 			int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
 			for (int32_t j=0; j < TILESIZE / 2; j++) {
 				if ((tileIdx_y * TILESIZE + 2*j + hexid < m) && (tileIdx_x * TILESIZE + lid_hex < n)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだcの中に収まってる場合だけstore
-					c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
+					c.ptr[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
 				}
 				c_offsetbase += 2 * n; //2行下に移動
 			}
@@ -111,7 +111,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (tileIdx_y * TILESIZE + 2*j + hexid < m) { //自スレッドが処理中の行が、まだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -121,7 +121,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
-						b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+						b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						b_offsetbase += 2 * n; //2行下に移動
 					}
 				}
@@ -129,7 +129,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if ((tileIdx_y * TILESIZE + 2*j + hexid < m) && (i * TILESIZE + lid_hex < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -140,7 +140,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (i * TILESIZE + 2*j + hexid < k) { //自スレッドが処理中の要素が列方向にまだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -157,7 +157,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 			int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
 			for (int32_t j=0; j < TILESIZE / 2; j++) {
 				if (tileIdx_y * TILESIZE + 2*j + hexid < m) { //自スレッドが処理中の要素が、列方向にまだcの中に収まってる場合だけstore
-					c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
+					c.ptr[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
 				}
 				c_offsetbase += 2 * n; //2行下に移動
 			}
@@ -168,14 +168,14 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
-						a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+						a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						a_offsetbase += 2 * k; //2行下に移動
 					}
 
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (tileIdx_x * TILESIZE + lid_hex < n) { //自スレッドが処理中の列が、まだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -187,7 +187,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (i * TILESIZE + lid_hex < k) { //自スレッドが処理中の要素が、行方向にまだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -198,7 +198,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if ((tileIdx_x * TILESIZE + lid_hex < n) && (i * TILESIZE + 2*j + hexid < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -215,7 +215,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 			int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
 			for (int32_t j=0; j < TILESIZE / 2; j++) {
 				if (tileIdx_x * TILESIZE + lid_hex < n) { //自スレッドが処理中の要素が、行方向にも列方向にもまだcの中に収まってる場合だけstore
-					c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
+					c.ptr[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
 				}
 				c_offsetbase += 2 * n; //2行下に移動
 			}
@@ -228,13 +228,13 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					//16*16*16でやろうとしてるので、tidが0~15の担当要素、16~31の担当要素は隔たりがある
 					//1回で小行列の2行分をa_halfに。
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
-						a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+						a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						a_offsetbase += 2 * k; //2行下に移動
 					}
 
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
-						b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+						b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						b_offsetbase += 2 * n; //2行下に移動
 					}
 				}
@@ -242,7 +242,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (i * TILESIZE + lid_hex < k) { //自スレッドが処理中の要素が、行方向にまだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -253,7 +253,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (i * TILESIZE + 2*j + hexid < k) { //自スレッドが処理中の要素が、行方向にも列方向にもまだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -269,7 +269,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 
 			int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
 			for (int32_t j=0; j < TILESIZE / 2; j++) {
-				c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
+				c.ptr[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
 				c_offsetbase += 2 * n; //2行下に移動
 			}
 		}
@@ -277,7 +277,7 @@ void dot_TC_NandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 }
 
 __global__
-void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k) {
+void dot_TC_TandN(Tensor &a, Tensor &b, Tensor &c, int32_t m, int32_t n, int32_t k) {
 	// aが転置され、k*mの形で並んでいることに注意
 
 	//a,b,cでは、小行列の要素が16個ごとにしか連続していない
@@ -312,7 +312,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = i * TILESIZE * m + tileIdx_y * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (tileIdx_y * TILESIZE + lid_hex < m) { //自スレッドが処理中の行が、まだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*m+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*m+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -323,7 +323,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (tileIdx_x * TILESIZE + lid_hex < n) { //自スレッドが処理中の列が、まだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -335,7 +335,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = i * TILESIZE * m + tileIdx_y * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if ((tileIdx_y * TILESIZE + lid_hex < m) && (i * TILESIZE + 2*j + hexid < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*m+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*m+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -346,7 +346,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if ((tileIdx_x * TILESIZE + lid_hex < n) && (i * TILESIZE + 2*j + hexid < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -363,7 +363,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 			int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
 			for (int32_t j=0; j < TILESIZE / 2; j++) {
 				if ((tileIdx_y * TILESIZE + 2*j + hexid < m) && (tileIdx_x * TILESIZE + lid_hex < n)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだcの中に収まってる場合だけstore
-					c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
+					c.ptr[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
 				}
 				c_offsetbase += 2 * n; //2行下に移動
 			}
@@ -375,7 +375,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = i * TILESIZE * m + tileIdx_y * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (tileIdx_y * TILESIZE + lid_hex < m) { //自スレッドが処理中の行が、まだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*m+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*m+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -385,7 +385,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
-						b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+						b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						b_offsetbase += 2 * n; //2行下に移動
 					}
 				}
@@ -393,7 +393,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = i * TILESIZE * m + tileIdx_y * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if ((tileIdx_y * TILESIZE + lid_hex < m) && (i * TILESIZE + 2*j + hexid < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*m+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*m+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -404,7 +404,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (i * TILESIZE + 2*j + hexid < k) { //自スレッドが処理中の要素が列方向にまだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -421,7 +421,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 			int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
 			for (int32_t j=0; j < TILESIZE / 2; j++) {
 				if (tileIdx_y * TILESIZE + 2*j + hexid < m) { //自スレッドが処理中の要素が、列方向にまだcの中に収まってる場合だけstore
-					c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
+					c.ptr[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
 				}
 				c_offsetbase += 2 * n; //2行下に移動
 			}
@@ -432,14 +432,14 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 
 					int32_t a_offsetbase = i * TILESIZE * m + tileIdx_y * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
-						a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*m+lid_hex]);
+						a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*m+lid_hex]);
 						a_offsetbase += 2 * m; //2行下に移動
 					}
 
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (tileIdx_x * TILESIZE + lid_hex < n) { //自スレッドが処理中の列が、まだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -451,7 +451,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = i * TILESIZE * m + tileIdx_y * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (i * TILESIZE + 2*j + hexid < k) { //自スレッドが処理中の要素が、行方向にまだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*m+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*m+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -462,7 +462,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if ((tileIdx_x * TILESIZE + lid_hex < n) && (i * TILESIZE + 2*j + hexid < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -479,7 +479,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 			int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
 			for (int32_t j=0; j < TILESIZE / 2; j++) {
 				if (tileIdx_x * TILESIZE + lid_hex < n) { //自スレッドが処理中の要素が、行方向にも列方向にもまだcの中に収まってる場合だけstore
-					c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
+					c.ptr[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
 				}
 				c_offsetbase += 2 * n; //2行下に移動
 			}
@@ -492,13 +492,13 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					//16*16*16でやろうとしてるので、tidが0~15の担当要素、16~31の担当要素は隔たりがある
 					//1回で小行列の2行分をa_halfに。
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
-						a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*m+lid_hex]);
+						a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*m+lid_hex]);
 						a_offsetbase += 2 * m; //2行下に移動
 					}
 
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
-						b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+						b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						b_offsetbase += 2 * n; //2行下に移動
 					}
 				}
@@ -506,7 +506,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = i * TILESIZE * m + tileIdx_y * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (i * TILESIZE + 2*j + hexid < k) { //自スレッドが処理中の要素が、行方向にまだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*m+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*m+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -517,7 +517,7 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = i * TILESIZE * n + tileIdx_x * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (i * TILESIZE + 2*j + hexid < k) { //自スレッドが処理中の要素が、行方向にも列方向にもまだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*n+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*n+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -533,14 +533,14 @@ void dot_TC_TandN(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 
 			int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
 			for (int32_t j=0; j < TILESIZE / 2; j++) {
-				c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
+				c.ptr[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
 				c_offsetbase += 2 * n; //2行下に移動
 			}
 		}
 	}
 }
 __global__
-void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k) {
+void dot_TC_NandT(Tensor &a, Tensor &b, Tensor &c, int32_t m, int32_t n, int32_t k) {
 	//bが転置され、n*kに配置されていることに注意
 
 	//a,b,cでは、小行列の要素が16個ごとにしか連続していない
@@ -574,7 +574,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (tileIdx_y * TILESIZE + 2*j + hexid < m) { //自スレッドが処理中の行が、まだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -586,7 +586,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = tileIdx_x * TILESIZE * k + i * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (tileIdx_x * TILESIZE + 2*j + hexid < n) { //自スレッドが処理中の列が、まだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*k+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -598,7 +598,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if ((tileIdx_y * TILESIZE + 2*j + hexid < m) && (i * TILESIZE + lid_hex < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -609,7 +609,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = tileIdx_x * TILESIZE * k + i * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if ((tileIdx_x * TILESIZE + 2*j + hexid < n) && (i * TILESIZE + lid_hex < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*k+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -626,7 +626,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 			int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
 			for (int32_t j=0; j < TILESIZE / 2; j++) {
 				if ((tileIdx_y * TILESIZE + 2*j + hexid < m) && (tileIdx_x * TILESIZE + lid_hex < n)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだcの中に収まってる場合だけstore
-					c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
+					c.ptr[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
 				}
 				c_offsetbase += 2 * n; //2行下に移動
 			}
@@ -638,7 +638,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (tileIdx_y * TILESIZE + 2*j + hexid < m) { //自スレッドが処理中の行が、まだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -648,7 +648,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 
 					int32_t b_offsetbase = tileIdx_x * TILESIZE * k + i * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
-						b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*k + lid_hex]);
+						b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*k + lid_hex]);
 						b_offsetbase += 2 * k; //2行下に移動
 					}
 				}
@@ -656,7 +656,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if ((tileIdx_y * TILESIZE + 2*j + hexid < m) && (i * TILESIZE + lid_hex < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k + lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k + lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -667,7 +667,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = tileIdx_x * TILESIZE * k + i * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (i * TILESIZE + lid_hex < k) { //自スレッドが処理中の要素が行方向にまだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*k + lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*k + lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -684,7 +684,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 			int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
 			for (int32_t j=0; j < TILESIZE / 2; j++) {
 				if (tileIdx_y * TILESIZE + 2*j + hexid < m) { //自スレッドが処理中の要素が、列方向にまだcの中に収まってる場合だけstore
-					c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
+					c.ptr[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
 				}
 				c_offsetbase += 2 * n; //2行下に移動
 			}
@@ -695,14 +695,14 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
-						a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+						a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						a_offsetbase += 2 * k; //2行下に移動
 					}
 
 					int32_t b_offsetbase = tileIdx_x * TILESIZE * k + i * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (tileIdx_x * TILESIZE + 2*j + hexid < n) { //自スレッドが処理中の列が、まだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*k + lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*k + lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -714,7 +714,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE; //a,bの中でのタイルの先頭要素のidx
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (i * TILESIZE + lid_hex < k) { //自スレッドが処理中の要素が、行方向にまだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -725,7 +725,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = tileIdx_x * TILESIZE * k + i * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if ((tileIdx_x * TILESIZE + 2*j + hexid < n) && (i * TILESIZE + lid_hex < k)) { //自スレッドが処理中の要素が、行方向にも列方向にもまだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*k+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -742,7 +742,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 			int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
 			for (int32_t j=0; j < TILESIZE / 2; j++) {
 				if (tileIdx_x * TILESIZE + lid_hex < n) { //自スレッドが処理中の要素が、行方向にも列方向にもまだcの中に収まってる場合だけstore
-					c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
+					c.ptr[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
 				}
 				c_offsetbase += 2 * n; //2行下に移動
 			}
@@ -755,14 +755,14 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					//16*16*16でやろうとしてるので、tidが0~15の担当要素、16~31の担当要素は隔たりがある
 					//1回で小行列の2行分をa_halfに。
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
-						a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+						a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						a_offsetbase += 2 * k; //2行下に移動
 					}
 
 					//bが転置され、n*kに配置されていることに注意
 					int32_t b_offsetbase = tileIdx_x * TILESIZE * k + i * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
-						b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*k+lid_hex]);
+						b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*k+lid_hex]);
 						b_offsetbase += 2 * k; //2行下に移動
 					}
 				}
@@ -770,7 +770,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t a_offsetbase = tileIdx_y * TILESIZE * k + i * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (i * TILESIZE + lid_hex < k) { //自スレッドが処理中の要素が、行方向にまだaの中に収まってる場合は、aからデータをload
-							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a[a_offsetbase + hexid*k+lid_hex]);
+							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(a.ptr[a_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //aに収まってない場合は0埋め
 							a_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -781,7 +781,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 					int32_t b_offsetbase = tileIdx_x * TILESIZE * k + i * TILESIZE;
 					for (int32_t j=0; j < TILESIZE / 2; j++) {
 						if (i * TILESIZE + lid_hex < k) { //自スレッドが処理中の要素が、行方向にも列方向にもまだbの中に収まってる場合は、bからデータをload
-							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b[b_offsetbase + hexid*k+lid_hex]);
+							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(b.ptr[b_offsetbase + hexid*k+lid_hex]);
 						}
 						else { //bに収まってない場合は0埋め
 							b_half[wid*ELEMS_TILE + lid + j*32] = __float2half(0.);
@@ -797,7 +797,7 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 
 			int32_t c_offsetbase = tileIdx_y * TILESIZE * n + tileIdx_x * TILESIZE;
 			for (int32_t j=0; j < TILESIZE / 2; j++) {
-				c[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
+				c.ptr[c_offsetbase + hexid*n+lid_hex] = __half2float(c_half[wid*ELEMS_TILE + lid + j*32]);
 				c_offsetbase += 2 * n; //2行下に移動
 			}
 		}
@@ -805,20 +805,20 @@ void dot_TC_NandT(float *a, float *b, float *c, int32_t m, int32_t n, int32_t k)
 }
 
 
-void dotTC_invoker(Tensor a, Tensor b, Tensor c, int32_t m, int32_t n, int32_t k, int32_t TorN) {
+extern "C++" void dotTC_invoker(Tensor &a, Tensor &b, Tensor &c, int32_t m, int32_t n, int32_t k, int32_t TorN) {
 	dim3 grid;
 	grid.x = (n-1) / (TILESIZE*TILEDIM_BLOCK) + 1;
 	grid.y = (m-1) / (TILESIZE*TILEDIM_BLOCK) + 1;
 
 	switch(TorN) {
 		case NandN:
-			dot_TC_NandN<<<grid, 128>>>(a.ptr, b.ptr, c.ptr, m, n, k);
+			dot_TC_NandN<<<grid, 128>>>(a, b, c, m, n, k);
 			break;
 		case TandN:
-			dot_TC_TandN<<<grid, 128>>>(a.ptr, b.ptr, c.ptr, m, n, k);
+			dot_TC_TandN<<<grid, 128>>>(a, b, c, m, n, k);
 			break;
 		case NandT:
-			dot_TC_NandT<<<grid, 128>>>(a.ptr, b.ptr, c.ptr, m, n, k);
+			dot_TC_NandT<<<grid, 128>>>(a, b, c, m, n, k);
 			break;
 		case TandT:
 			cout << "dot_TC doesn't support MatMul both transpositioned." << endl;

@@ -23,8 +23,9 @@ int32_t label_size;
 #define TandN 1
 #define NandT 2
 #define TandT 3
+#define DEBUG 1
 
-extern void dotTC_invoker(Tensor a, Tensor b, Tensor c, int32_t m, int32_t n, int32_t k, int32_t TorN);
+extern void dotTC_invoker(Tensor &a, Tensor &b, Tensor &c, int32_t m, int32_t n, int32_t k, int32_t TorN);
 
 
 
@@ -278,7 +279,7 @@ void dotTC(Tensor &a, Tensor &b, Tensor &c, int32_t TorN) {
 			m = a.w; k = a.h; k_ = b.w; n = b.h;
 			break;
 		default:
-			cout << "Transpose error in dotTC_invoker." << endl;
+			cout << "Transpose error in dotTC." << endl;
 			return;
 	}
 
