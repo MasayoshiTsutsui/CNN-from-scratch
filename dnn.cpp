@@ -50,29 +50,29 @@ int main() {
 	image_size = train_data.w;
 	label_size = train_label.w;
 
-	Tensor x(batch_size, image_size);
-	Tensor t(batch_size, label_size);
+	Tensor x(1, 1, batch_size, image_size);
+	Tensor t(1, 1, batch_size, label_size);
 
-	Tensor w1(image_size, feature_size1);
-	Tensor dw1(image_size, feature_size1);
-	Tensor b1(1, feature_size1);
-	Tensor db1(1, feature_size1);
+	Tensor w1(1, 1, image_size, feature_size1);
+	Tensor dw1(1, 1, image_size, feature_size1);
+	Tensor b1(1, 1, 1, feature_size1);
+	Tensor db1(1, 1, 1, feature_size1);
 	
 
-	Tensor z1(batch_size, feature_size1);
-	Tensor dz1(batch_size, feature_size1);
+	Tensor z1(1, 1, batch_size, feature_size1);
+	Tensor dz1(1, 1, batch_size, feature_size1);
 
-	Tensor z1_test(test_size, feature_size1);
+	Tensor z1_test(1, 1, test_size, feature_size1);
 
-	Tensor w2(feature_size1, label_size);
-	Tensor dw2(feature_size1, label_size);
-	Tensor b2(1, label_size);
-	Tensor db2(1, label_size);
+	Tensor w2(1, 1, feature_size1, label_size);
+	Tensor dw2(1, 1, feature_size1, label_size);
+	Tensor b2(1, 1, 1, label_size);
+	Tensor db2(1, 1, 1, label_size);
 
-	Tensor y(batch_size, label_size);
-	Tensor dy(batch_size, label_size);
+	Tensor y(1, 1, batch_size, label_size);
+	Tensor dy(1, 1, batch_size, label_size);
 
-	Tensor y_test(test_size, label_size);
+	Tensor y_test(1, 1, test_size, label_size);
 
 	init_zero(x);
 	init_zero(t);
@@ -215,7 +215,7 @@ void readTrainingFile(string filename, Tensor &images){
 	ifs.read((char*)&cols,sizeof(cols));
 	cols= reverseInt(cols);
 
-	images.SetDim(number_of_images, rows*cols);
+	images.SetDim(1, 1, number_of_images, rows*cols);
 
 
 	for(int32_t i = 0; i < number_of_images; i++){
@@ -247,7 +247,7 @@ void readLabelFile(string filename, Tensor &label){
 	ifs.read((char*)&number_of_images,sizeof(number_of_images));
 	number_of_images= reverseInt(number_of_images);
 
-	label.SetDim(number_of_images, 10);
+	label.SetDim(1, 1, number_of_images, 10);
 
 
 	init_zero(label);

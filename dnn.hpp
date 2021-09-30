@@ -12,6 +12,8 @@ class Tensor
 {
 	public:
 		float* ptr{nullptr};
+		int32_t d{0};
+		int32_t c{0};
 		int32_t h{0};
 		int32_t w{0};
 		int32_t size{0};
@@ -21,8 +23,9 @@ class Tensor
 		
 		explicit Tensor() { };
 		//コンストラクタでもうgpu側にメモリ領域を確保してしまう
-		explicit Tensor(int32_t height, int32_t width) {
-			h = height; w = width; size = height * width;
+		explicit Tensor(int32_t datanum, int32_t channel, int32_t height, int32_t width) {
+			d = datanum; c = channel; h = height; w = width;
+			size = datanum * channel * height * width;
 			ptr = new float[size];
 			#pragma acc enter data copyin(this)
 			#pragma acc enter data create(ptr[0:size])
@@ -32,7 +35,8 @@ class Tensor
 			#pragma acc exit data delete(this)
 			delete [] ptr;
 			ptr = NULL;
-			h = 0; w = 0; size = 0;
+			d = 0; c = 0; h = 0; w = 0;
+			size = 0;
 		}
 
 		inline void updateHost() {
@@ -50,8 +54,9 @@ class Tensor
 				cout << endl;
 			}
 		}
-		void SetDim(int32_t height, int32_t width) {
-			h = height; w = width; size = height * width;
+		void SetDim(int32_t datanum, int32_t channel, int32_t height, int32_t width) {
+			d = datanum; c = channel; h = height; w = width;
+			size = datanum * channel * height * width;
 			ptr = new float[size];
 			#pragma acc enter data copyin(this)
 			#pragma acc enter data create(ptr[0:size])
