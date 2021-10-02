@@ -1,6 +1,5 @@
 #include <iostream>
-#include <cmath>
-#include "dnn.hpp"
+#include "tensor.hpp"
 
 using namespace std;
 
@@ -69,38 +68,38 @@ void col2im(Tensor &expanded, Tensor &image) {
 }
 
 
-int main(){
-	int32_t datanum = 2;
-	int32_t channel = 3;
-	int32_t width = 3;
-	int32_t height = 3;
-	int32_t padsize = 1;
-	int32_t filtersize = 3;
-	int32_t stride = 1;
-	Tensor a(datanum, channel, height, width);
+//int main(){
+	//int32_t datanum = 2;
+	//int32_t channel = 3;
+	//int32_t width = 3;
+	//int32_t height = 3;
+	//int32_t padsize = 1;
+	//int32_t filtersize = 3;
+	//int32_t stride = 1;
+	//Tensor a(datanum, channel, height, width);
 	
-	for (int32_t i=0; i < a.size; i++) {
-		a[i] = (float)i;
-	}
-	//a.Print();
-	cout << endl;
+	//for (int32_t i=0; i < a.size; i++) {
+		//a[i] = (float)i;
+	//}
+	////a.Print();
+	//cout << endl;
 
 
-	Tensor b(1, 1, ((width+padsize*2-filtersize+1) / stride)*((height+padsize*2-filtersize+1) / stride)*datanum, filtersize*filtersize*channel);
+	//Tensor b(1, 1, ((width+padsize*2-filtersize+1) / stride)*((height+padsize*2-filtersize+1) / stride)*datanum, filtersize*filtersize*channel);
 
-	im2col(a, b, padsize, filtersize, stride);
+	//im2col(a, b, padsize, filtersize, stride);
 
-	//b.Print();
+	////b.Print();
 
-	Tensor c(1,1,datanum*height*width,channel);
-	for (int32_t i=0; i < c.size; i++) {
-		c[i] = (float)i;
-	}
+	//Tensor c(1,1,datanum*height*width,channel);
+	//for (int32_t i=0; i < c.size; i++) {
+		//c[i] = (float)i;
+	//}
 
-	Tensor d(datanum, channel, height, width);
+	//Tensor d(datanum, channel, height, width);
 
-	col2im(c, d);
-	d.Print();
+	//col2im(c, d);
+	//d.Print();
 	
-	return 0;
-}
+	//return 0;
+//}
