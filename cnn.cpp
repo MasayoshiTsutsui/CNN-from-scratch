@@ -10,6 +10,7 @@ void im2col(Tensor &image, Tensor &expanded, int32_t padsize, int32_t filtersize
 	int32_t channel = image.c;
 	int32_t height = image.h;
 	int32_t width = image.w;
+
 	if(expanded.d != 1 || expanded.c != 1) {
 		cout << "Tensor size mismatch in img2col" << endl;
 		return;
@@ -42,12 +43,37 @@ void im2col(Tensor &image, Tensor &expanded, int32_t padsize, int32_t filtersize
 	}
 }
 
+void col2im(Tensor &expanded, Tensor &image) {
+	int32_t datanum = image.d;
+	int32_t channel = image.c;
+	int32_t height = image.h;
+	int32_t width = image.w;
+
+	if(expanded.d != 1 || expanded.c != 1) {
+		cout << "Tensor size mismatch in img2col" << endl;
+		return;
+	}
+
+	int32_t imgsize3 = image.size / datanum;
+	int32_t imgsize2 = imgsize3 / channel;
+
+	for (int32_t d=0; d < datanum; d++) {
+		for (int32_t c=0; c < channel; c++) {
+			for (int32_t h=0; h < height; h++) {
+				for (int32_t w=0; w < width; w++) {
+					image[d*imgsize3 + c*imgsize2 + h*width + w] = expanded[d*imgsize3 + (h*width + w)*channel + c];
+				}
+			}
+		}
+	}
+}
+
 
 int main(){
 	int32_t datanum = 2;
 	int32_t channel = 3;
-	int32_t width = 10;
-	int32_t height = 10;
+	int32_t width = 3;
+	int32_t height = 3;
 	int32_t padsize = 1;
 	int32_t filtersize = 3;
 	int32_t stride = 1;
@@ -56,7 +82,7 @@ int main(){
 	for (int32_t i=0; i < a.size; i++) {
 		a[i] = (float)i;
 	}
-	a.Print();
+	//a.Print();
 	cout << endl;
 
 
@@ -64,7 +90,17 @@ int main(){
 
 	im2col(a, b, padsize, filtersize, stride);
 
-	b.Print();
+	//b.Print();
+
+	Tensor c(1,1,datanum*height*width,channel);
+	for (int32_t i=0; i < c.size; i++) {
+		c[i] = (float)i;
+	}
+
+	Tensor d(datanum, channel, height, width);
+
+	col2im(c, d);
+	d.Print();
 	
 	return 0;
 }

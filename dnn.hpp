@@ -47,11 +47,21 @@ class Tensor
 		}
 
 		void Print() {
-			for (ll i=0; i < h; i++) {
-				for (ll j=0; j < w; j++) {
-					cout << ptr[i*w+j] << " ";
+			int32_t idx = 0;
+
+			for (int32_t id=0; id < d; id++) {
+				cout << "data" << id << ":" << endl;
+				for (int32_t ic=0; ic < c; ic++) {
+					cout << "	channel" << ic << ":" << endl;
+					for (int32_t ih=0; ih < h; ih++) {
+						cout << "		";
+						for (int32_t iw=0; iw < w; iw++) {
+							cout << ptr[idx] << " ";
+							idx++;
+						}
+						cout << endl;
+					}
 				}
-				cout << endl;
 			}
 		}
 		void SetDim(int32_t datanum, int32_t channel, int32_t height, int32_t width) {
