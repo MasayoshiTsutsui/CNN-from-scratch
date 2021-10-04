@@ -61,7 +61,8 @@ void readTrainingFile(string filename, Tensor &images){
 	ifs.read((char*)&cols,sizeof(cols));
 	cols= reverseInt(cols);
 
-	images.SetDim(1, 1, number_of_images, rows*cols);
+	//images.SetDim(1, 1, number_of_images, rows*cols);
+	images.SetDim(number_of_images, 1, rows, cols);
 
 
 	for(int32_t i = 0; i < number_of_images; i++){
@@ -93,6 +94,7 @@ void readLabelFile(string filename, Tensor &label){
 	ifs.read((char*)&number_of_images,sizeof(number_of_images));
 	number_of_images= reverseInt(number_of_images);
 
+	//label.SetDim(1, 1, number_of_images, 10);
 	label.SetDim(1, 1, number_of_images, 10);
 
 
@@ -284,45 +286,41 @@ void div_by_scalar(Tensor &a, float d) {
 	}
 }
 
-void relu(Tensor &s, Tensor &t) {
-	if (s.h != 1 || t.h != 1) {
-		cout << "relu only receives vector." << endl << endl;
+
+//どちらも2次元形状のデータでないとだめ。
+void relu(Tensor &s, IntTensor &erased_mask) {
+	if (s.d != 1 || s.c != 1 || erased_mask.d != 1 || erased_mask.c != 1 || s.h != erased_mask.h || s.w != erased_mask.w) {
+		cout << "Tensor size mismatch in relu." << endl;
 		return;
 	}
-	int32_t l = s.w;
-	for (int32_t i=0; i < l; i++) {
-		t[i] = (s[i] < 0.) ? 0. : s[i];
+	for (int32_t i=0; i < erased_mask.size; i++) {
+		erased_mask[i] = 0;
 	}
-}
-
-void init_random(Tensor &w) {
-	float sigma = 0.01;
-	float mean = 0.0;
-	int32_t height = w.h;
-	int32_t width = w.w;
-	random_device seed_gen;
-	default_random_engine engine(seed_gen());
-
-	normal_distribution<> dist(mean, sigma);
-
-	for (int32_t i=0; i < height; i++) {
-		for (int32_t j=0; j < width; j++) {
-			w[i*width + j] = dist(engine);
+	for (int32_t i=0; i < s.h; i++) {
+		for (int32_t j=0; j < s.w; j++) {
+			if (s[i*s.w + j] < 0.) {
+				s[i*s.w + j] = 0.;
+				erased_mask[i*s.w + j] = 1; //0にされた場所のみ1を立てる
+			}
 		}
 	}
 }
 
-void init_zero(Tensor &w) {
-	int32_t height = w.h;
-	int32_t width = w.w;
+void back_relu(Tensor &ds, IntTensor &erasedmask) {
 
-	for (int32_t i=0; i < height; i++) {
-		for (int32_t j=0; j < width; j++) {
-			w[i*width + j] = 0.;
+	if (ds.d != 1 || ds.c != 1 || erasedmask.d != 1 || erasedmask.c != 1 || ds.h != erasedmask.h || ds.w != erasedmask.w) {
+		cout << "Tensor size mismatch in back_relu." << endl;
+		return;
+	}
+
+	for (int32_t i=0; i < ds.h; i++) {
+		for (int32_t j=0; j < ds.w; j++) {
+			if (erasedmask[i*ds.w + j] == 1) {
+				ds[i*ds.w + j] = 0.;
+			}
 		}
 	}
 }
-
 
 void softmax(Tensor &a) {
 	float max_pxl;
@@ -445,16 +443,41 @@ float accuracy(Tensor &y, Tensor &t) {
 void batch_random_choice(Tensor &dataset, Tensor &labelset, Tensor &x, Tensor &t) {
 	random_device rnd;
 	mt19937 mt(rnd());
-	uniform_int_distribution<> randbatch(0, dataset.h-1);
+	uniform_int_distribution<> randbatch(0, dataset.d-1);
+	init_zero(x);
 	init_zero(t);
-	for (int32_t i=0; i < x.h; i++) {
-		int32_t img_idx = randbatch(mt);
 
-		for (int32_t j=0; j < 10; j++) {
-			t[i*10 + j] = labelset[img_idx*10 + j];
+	int32_t imgsize3 = dataset.size / dataset.d;
+	int32_t imgsize2 = imgsize3 / dataset.c;
+
+
+	for (int32_t d=0; d < x.d; d++) {
+		int32_t data_idx = randbatch(mt);
+		for (int32_t c=0; c < x.c; c++) {
+			for (int32_t h=0; h < x.h; h++) {
+				for (int32_t w=0; w < x.w; w++) {
+					x[d*imgsize3 + c*imgsize2 + h*x.w + w] = dataset[data_idx*imgsize3 + c*imgsize2 + h*x.w + w];
+				}
+			}
 		}
-		for (int32_t j=0; j < x.w; j++) {
-			x[i*x.w + j] = dataset[img_idx*x.w + j];
+		//for (int32_t c=0; c < t.c; c++) {
+			//for (int32_t h=0; h < t.h; h++) {
+				//for (int32_t w=0; w < t.w; w++) {
+					//t[d*t.c*t.h*t.w + c*t.h*t.w + h*t.w + w] = labelset[data_idx*t.c*t.h*t.w + c*t.h*t.w + h*t.w + w];
+				//}
+			//}
+		//}
+		for (int32_t i=0; i < t.w; i++) {
+			t[d*t.w + i] = labelset[data_idx*t.w + i];
 		}
 	}
+	//for (int32_t i=0; i < x.h; i++) {
+
+		//for (int32_t j=0; j < 10; j++) {
+			//t[i*10 + j] = labelset[img_idx*10 + j];
+		//}
+		//for (int32_t j=0; j < x.w; j++) {
+			//x[i*x.w + j] = dataset[img_idx*x.w + j];
+		//}
+	//}
 }
