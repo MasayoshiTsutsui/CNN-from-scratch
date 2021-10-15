@@ -11,8 +11,8 @@ using namespace std;
 
 int32_t batch_size = 100;
 int32_t feature_size1 = 100;
-int32_t iters_num = 601;
-float learning_rate = 0.1;
+int32_t iters_num = 1201;
+float learning_rate = 0.01;
 
 
 int32_t image_size;
@@ -190,147 +190,42 @@ int main() {
 
 		//畳み込み層順伝播開始
 		im2col(x, expanded_x, padsize, filtersize, stride);
-#if DEBUG
-		cout << "x :" << endl;
-		x.Print();
-		cout << "expanded_x :" << endl;
-		expanded_x.Print();
-#endif
 		dot(expanded_x, conv1, raw_convoluted1, NandN);
-#if DEBUG
-		cout << "conv1 :" << endl;
-		conv1.Print();
-		cout << "raw_convoluted1 :" << endl;
-		raw_convoluted1.Print();
-#endif
 		add_bias(raw_convoluted1, rawconv1_b);
-#if DEBUG
-		cout << "rawconv1_b :" << endl;
-		rawconv1_b.Print();
-		cout << "biased raw_convoluted1 :" << endl;
-		raw_convoluted1.Print();
-#endif
 		relu(raw_convoluted1, relu1mask);
-#if DEBUG
-		cout << "raw_convoluted1 after Relu :" << endl;
-		raw_convoluted1.Print();
-#endif
 		col2im(raw_convoluted1, reshaped_conv1);
-#if DEBUG
-		cout << "reshaped_conv1 :" << endl;
-		reshaped_conv1.Print();
-#endif
 		im2col_pool(reshaped_conv1, conv1_for_pool, poolsize);
-#if DEBUG
-		cout << "conv1_for_pool :" << endl;
-		conv1_for_pool.Print();
-#endif
 		pooling(conv1_for_pool, pooled_conv1, pool_selected_idx, poolsize);
-#if DEBUG
-		cout << "pool_selected_idx :" << endl;
-		pool_selected_idx.Print();
-		cout << "pooled_conv1 :" << endl;
-		pooled_conv1.Print();
-#endif
 		reshape_tensor(pooled_conv1, expanded_pooled_conv1);
-#if DEBUG
-		cout << "expanded_pooled_conv1 :" << endl;
-		expanded_pooled_conv1.Print();
-#endif
 		//pooled_conv1.Reshape(1, 1, batch_size, pooled_conv1.size / batch_size);
 
 		//順伝播開始
 		affine_layer(expanded_pooled_conv1, w1, b1, hidden2);
-#if DEBUG
-		cout << "w1 :" << endl;
-		w1.Print();
-		cout << "b1 :" << endl;
-		b1.Print();
-		cout << "hidden2 :" << endl;
-		hidden2.Print();
-#endif
 		relu(hidden2, relu2mask);
-#if DEBUG
-		cout << "relu2mask :" << endl;
-		relu2mask.Print();
-		cout << "hidden2 after Relu :" << endl;
-		hidden2.Print();
-#endif
 		affine_layer(hidden2, w2, b2, y);
-#if DEBUG
-		cout << "w2 :" << endl;
-		w2.Print();
-		cout << "b2 :" << endl;
-		b2.Print();
-		cout << "y :" << endl;
-		y.Print();
-#endif
 		softmax(y);
-#if DEBUG
-		cout << "y after softmax" << endl;
-		y.Print();
-#endif
 		//lossval = loss(y, t);
 		//順伝播終了
 
-		if (i % 100 == 0) {
-#if DEBUG
-	cout << "15" << endl;
-#endif
+		if (i % 50 == 0) {
 			im2col(test_data, expanded_test_data, padsize, filtersize, stride);
-#if DEBUG
-	cout << "16" << endl;
-#endif
 			dot(expanded_test_data, conv1, raw_convoluted1_test, NandN);
-#if DEBUG
-	cout << "17" << endl;
-#endif
 			add_bias(raw_convoluted1_test, rawconv1_b);
-#if DEBUG
-	cout << "17.5" << endl;
-#endif
 			relu(raw_convoluted1_test, relu1mask_test);
-#if DEBUG
-	cout << "18" << endl;
-#endif
 			col2im(raw_convoluted1_test, reshaped_conv1_test);
-#if DEBUG
-	cout << "19" << endl;
-#endif
 			im2col_pool(reshaped_conv1_test, conv1_for_pool_test, poolsize);
 			//if (i == 40) {
 				//cout << "conv1_for_pool_test :" << endl;
 				//conv1_for_pool_test.Print();
 			//}
 			pooling(conv1_for_pool_test, pooled_conv1_test, pool_selected_idx_test, poolsize);
-#if DEBUG
-	cout << "21" << endl;
-#endif
 			reshape_tensor(pooled_conv1_test, expanded_pooled_conv1_test);
-#if DEBUG
-	cout << "22" << endl;
-#endif
 			//pooled_conv1_test.Reshape(1, 1, test_data.d, pooled_conv1.size / test_data.d);
 
-#if DEBUG
-	cout << "23" << endl;
-#endif
 			affine_layer(expanded_pooled_conv1_test, w1, b1, hidden2_test);
-#if DEBUG
-	cout << "24" << endl;
-#endif
 			relu(hidden2_test, relu2mask_test);
-#if DEBUG
-	cout << "25" << endl;
-#endif
 			affine_layer(hidden2_test, w2, b2, y_test);
-#if DEBUG
-	cout << "26" << endl;
-#endif
 			float acc = accuracy(y_test, test_label);
-#if DEBUG
-	cout << "27" << endl;
-#endif
 			cout << "iter " << i << " : " << acc << endl;
 		}
 
@@ -371,24 +266,14 @@ int main() {
 
 		//逆伝播終了
 	}
-	//cout << "conv1 :" << endl;
-	//conv1.Print();
-	//cout << "rawconv1_b :" << endl;
-	//rawconv1_b.Print();
-	//cout << "w1 :" << endl;
-	//w1.Print();
-	//cout << "b1" << endl;
-	//b1.Print();
-	//cout << "w2 :" << endl;
-	//w2.Print();
-	//cout << "b2 :" << endl;
-	//b2.Print();
 
 	auto end = chrono::system_clock::now();
 	auto dur = end - start;
 	auto msec = chrono::duration_cast<chrono::milliseconds>(dur).count();
 
 	cout << (double)msec / 1000 << "sec." << endl;
+
+	return 0;
 	
 
 }

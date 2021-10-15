@@ -1,17 +1,19 @@
 #include <iostream>
 #include <random>
+#include <cmath>
 #include "tensor.hpp"
 
 
 void init_random(Tensor &a) {
-	float sigma = 0.01;
+	float sigma = sqrt(2. / a.h);
 	float mean = 0.0;
 	int32_t datanum = a.d;
 	int32_t channel = a.c;
 	int32_t height = a.h;
 	int32_t width = a.w;
-	random_device seed_gen;
-	default_random_engine engine(seed_gen());
+	//random_device seed_gen;
+	//default_random_engine engine(seed_gen());
+	mt19937 engine(2);
 
 	normal_distribution<> dist(mean, sigma);
 

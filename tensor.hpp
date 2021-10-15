@@ -18,7 +18,13 @@ class Tensor
 		int32_t size{0};
 
 		#pragma acc routine seq
-		float& operator[](size_t idx) { return ptr[idx]; };
+		float& operator[](size_t idx) {
+			if (idx >= size) {
+				cout << "Tensor out of range!" << endl;
+			}
+			return ptr[idx];
+		};
+
 		
 		explicit Tensor() { };
 		//コンストラクタでもうgpu側にメモリ領域を確保してしまう
@@ -95,7 +101,12 @@ class IntTensor
 		int32_t size{0};
 
 		#pragma acc routine seq
-		int32_t& operator[](size_t idx) { return ptr[idx]; };
+		int32_t& operator[](size_t idx) {
+			if (idx >= size) {
+				cout << "Tensor out of range!" << endl;
+			}
+			return ptr[idx];
+		};
 		
 		explicit IntTensor() { };
 		//コンストラクタでもうgpu側にメモリ領域を確保してしまう

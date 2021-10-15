@@ -19,7 +19,16 @@ void im2col(Tensor &image, Tensor &expanded, int32_t padsize, int32_t filtersize
 	int32_t imgsize3 = image.size / datanum;
 	int32_t imgsize2 = imgsize3 / channel;
 
+	//int32_t convoluted1_h = (image.h + padsize*2 - filtersize + 1) / stride;
+	//int32_t convoluted1_w = (image.w + padsize*2 - filtersize + 1) / stride;
+	//int32_t filterspace = image.c * filtersize * filtersize; //フィルターが一回に畳みこむ要素数
+	//int32_t expsize_data = convoluted1_h * convoluted1_w * filterspace; //1dataあたりのexpandedのサイズ
+
+
+	#pragma acc kernels present(image, expanded)
+	#pragma acc loop independent gang
 	for (int32_t d=0; d < datanum; d++) {
+		#pragma acc loop independent vector
 		for (int32_t ih=-padsize; ih <= height+padsize-filtersize; ih+=stride) { //filterに取り込まれる最左上の要素のy座標
 			for (int32_t iw=-padsize; iw <= width+padsize-filtersize; iw+=stride) { //同上のx座標
 				for (int32_t c=0; c < channel; c++) {
@@ -27,6 +36,9 @@ void im2col(Tensor &image, Tensor &expanded, int32_t padsize, int32_t filtersize
 						for (int32_t fw=0; fw < filtersize; fw++) {
 							int32_t h_Img = ih + fh;
 							int32_t w_Img = iw + fw;
+							//int32_t h_conv_times = (ih + padsize) / stride;
+							//int32_t w_conv_times = (iw + padsize) / stride;
+							//exp_idx = d*expsize_data + h_conv_times*convoluted1_w*filterspace + w_conv_times*filterspace + c*filtersize*filtersize + fh*filtersize + fw;
 							if (h_Img < 0 || w_Img < 0 || h_Img >= height || w_Img >= width) {
 								expanded[exp_idx] = 0.;
 							}
@@ -94,7 +106,10 @@ void col2im(Tensor &expanded, Tensor &image) {
 	int32_t imgsize3 = image.size / datanum;
 	int32_t imgsize2 = imgsize3 / channel;
 
+	#pragma acc kernels present(expanded, image)
+	#pragma acc loop independent gang
 	for (int32_t d=0; d < datanum; d++) {
+		#pragma acc loop independent vector
 		for (int32_t c=0; c < channel; c++) {
 			for (int32_t h=0; h < height; h++) {
 				for (int32_t w=0; w < width; w++) {
@@ -149,16 +164,22 @@ void im2col_pool(Tensor &image, Tensor &expanded, int32_t filtersize) {
 	int32_t imgsize3 = image.size / datanum;
 	int32_t imgsize2 = imgsize3 / channel;
 
+	#pragma acc kernels present(image, expanded)
+	#pragma acc loop independent gang
 	for (int32_t d=0; d < datanum; d++) {
+		#pragma acc loop independent vector
 		for (int32_t c=0; c < channel; c++) {
 			for (int32_t ih=0; ih <= height-filtersize; ih+=filtersize) { //filterに取り込まれる最左上の要素のy座標
 				for (int32_t iw=0; iw <= width-filtersize; iw+=filtersize) { //同上のx座標
 					for (int32_t fh=0; fh < filtersize; fh++) {
 						for (int32_t fw=0; fw < filtersize; fw++) {
+							int32_t h_pool_times = ih / filtersize;
+							int32_t w_pool_times = iw / filtersize;
 							int32_t h_Img = ih + fh;
 							int32_t w_Img = iw + fw;
+							exp_idx = d*imgsize3 + c*imgsize2 + h_pool_times*width*filtersize + w_pool_times*filtersize*filtersize + fh*filtersize + fw;
 							expanded[exp_idx] = image[d*imgsize3 + c*imgsize2 + h_Img*width + w_Img];
-							exp_idx++;
+							//exp_idx++;
 						}
 					}
 				}

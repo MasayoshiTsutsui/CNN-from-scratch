@@ -293,17 +293,33 @@ void relu(Tensor &s, IntTensor &erased_mask) {
 		cout << "Tensor size mismatch in relu." << endl;
 		return;
 	}
-	for (int32_t i=0; i < erased_mask.size; i++) {
-		erased_mask[i] = 0;
-	}
-	for (int32_t i=0; i < s.h; i++) {
-		for (int32_t j=0; j < s.w; j++) {
-			if (s[i*s.w + j] < 0.) {
-				s[i*s.w + j] = 0.;
-				erased_mask[i*s.w + j] = 1; //0にされた場所のみ1を立てる
+	int32_t h = s.h;
+	int32_t w = s.w;
+	#pragma acc kernels present(s, erased_mask)
+	#pragma acc loop independent gang
+	for (int32_t i=0; i < h; i++) {
+		#pragma acc loop independent vector
+		for (int32_t j=0; j < w; j++) {
+			if (s[i*w + j] < 0.) {
+				s[i*w + j] = 0.;
+				erased_mask[i*w + j] = 1; //0にされた場所のみ1を立てる
+			}
+			else {
+				erased_mask[i*w + j] = 0;
 			}
 		}
 	}
+	//for (int32_t i=0; i < erased_mask.size; i++) {
+		//erased_mask[i] = 0;
+	//}
+	//for (int32_t i=0; i < s.h; i++) {
+		//for (int32_t j=0; j < s.w; j++) {
+			//if (s[i*s.w + j] < 0.) {
+				//s[i*s.w + j] = 0.;
+				//erased_mask[i*s.w + j] = 1; //0にされた場所のみ1を立てる
+			//}
+		//}
+	//}
 }
 
 void back_relu(Tensor &ds, IntTensor &erasedmask) {
@@ -441,8 +457,8 @@ float accuracy(Tensor &y, Tensor &t) {
 }
 
 void batch_random_choice(Tensor &dataset, Tensor &labelset, Tensor &x, Tensor &t) {
-	random_device rnd;
-	mt19937 mt(rnd());
+	//random_device rnd;
+	mt19937 mt(1);
 	uniform_int_distribution<> randbatch(0, dataset.d-1);
 	init_zero(x);
 	init_zero(t);
