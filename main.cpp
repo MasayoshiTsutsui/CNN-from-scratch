@@ -63,72 +63,102 @@ int main() {
 
 	Tensor expanded_x(1, 1, convoluted1_h*convoluted1_w*batch_size, filtersize*filtersize*image_c);
 	init_zero(expanded_x);
+	expanded_x.updateDev();
 	Tensor d_expanded_x(1, 1, expanded_x.h, expanded_x.w);
 	init_zero(d_expanded_x);
+	d_expanded_x.updateDev();
 	Tensor expanded_test_data(1, 1, convoluted1_h*convoluted1_w*test_data.d, filtersize*filtersize*image_c);
 	init_zero(expanded_test_data);
+	expanded_test_data.updateDev();
 
 	Tensor conv1(1, 1, image_c*filtersize*filtersize, filternum);
 	init_random(conv1);
+	conv1.updateDev();
 
 	Tensor d_conv1(1, 1, conv1.h, conv1.w);
 	init_zero(d_conv1);
+	d_conv1.updateDev();
 
 	Tensor raw_convoluted1(1, 1, convoluted1_h*convoluted1_w*batch_size, filternum);
 	init_zero(raw_convoluted1);
+	raw_convoluted1.updateDev();
 	Tensor d_raw_convoluted1(1, 1, raw_convoluted1.h, raw_convoluted1.w);
 	init_zero(d_raw_convoluted1);
+	d_raw_convoluted1.updateDev();
 
 	Tensor rawconv1_b(1, 1, 1, raw_convoluted1.w); //畳み込み層のbias
 	init_zero(rawconv1_b);
+	rawconv1_b.updateDev();
 	Tensor d_rawconv1_b(1, 1, 1, raw_convoluted1.w); //畳み込み層のbias微小変化
 	init_zero(d_rawconv1_b);
+	d_rawconv1_b.updateDev();
 	IntTensor relu1mask(1, 1, raw_convoluted1.h, raw_convoluted1.w);
 	init_zeroint(relu1mask);
+	relu1mask.updateDev();
 
 
 
 	Tensor raw_convoluted1_test(1, 1, convoluted1_h*convoluted1_w*test_data.d, filternum);
 	init_zero(raw_convoluted1_test);
+	raw_convoluted1_test.updateDev();
 	IntTensor relu1mask_test(1, 1, raw_convoluted1_test.h, raw_convoluted1_test.w);
 	init_zeroint(relu1mask_test);
+	relu1mask_test.updateDev();
 
 	Tensor reshaped_conv1(batch_size, filternum, convoluted1_h, convoluted1_w); //畳み込みの後、整形
 	init_zero(reshaped_conv1);
+	reshaped_conv1.updateDev();
 	Tensor d_reshaped_conv1(batch_size, filternum, convoluted1_h, convoluted1_w); //畳み込みの後、整形
 	init_zero(d_reshaped_conv1);
+	d_reshaped_conv1.updateDev();
 
 	Tensor reshaped_conv1_test(test_data.d, filternum, convoluted1_h, convoluted1_w);
 	init_zero(reshaped_conv1_test);
+	reshaped_conv1_test.updateDev();
 
 
 	Tensor conv1_for_pool(batch_size, filternum, (convoluted1_h*convoluted1_w)/(poolsize*poolsize) ,poolsize*poolsize); //w方向にpoolingfilter1枚に食われる要素が並ぶ
 	init_zero(conv1_for_pool);
+	conv1_for_pool.updateDev();
 
 	Tensor d_conv1_for_pool(batch_size, filternum, (convoluted1_h*convoluted1_w)/(poolsize*poolsize) ,poolsize*poolsize); //上記の微小変化
 	init_zero(d_conv1_for_pool);
+	d_conv1_for_pool.updateDev();
 	Tensor conv1_for_pool_test(test_data.d, filternum, (convoluted1_h*convoluted1_w)/(poolsize*poolsize) ,poolsize*poolsize); //w方向にpoolingfilter1枚に食われる要素が並ぶ
 	init_zero(conv1_for_pool_test);
+	conv1_for_pool_test.updateDev();
 	IntTensor pool_selected_idx_test(test_data.d, filternum, (convoluted1_h*convoluted1_w)/(poolsize*poolsize) ,1); //poolingフィルター内でmaxだったもののidxを保持
 	init_zeroint(pool_selected_idx_test);
+	pool_selected_idx_test.updateDev();
 
 	IntTensor pool_selected_idx(batch_size, filternum, (convoluted1_h*convoluted1_w)/(poolsize*poolsize) ,1); //poolingフィルター内でmaxだったもののidxを保持
 	init_zeroint(pool_selected_idx);
+	pool_selected_idx.updateDev();
 
 	Tensor pooled_conv1(batch_size, filternum, conv1_for_pool.h, 1);
 	init_zero(pooled_conv1);
+	pooled_conv1.updateDev();
+
 	Tensor d_pooled_conv1(batch_size, filternum, conv1_for_pool.h, 1);
 	init_zero(d_pooled_conv1);
+	d_pooled_conv1.updateDev();
+
 	Tensor expanded_pooled_conv1(1, 1, batch_size, filternum * conv1_for_pool.h);
 	init_zero(expanded_pooled_conv1);
+	expanded_pooled_conv1.updateDev();
+
 	Tensor d_expanded_pooled_conv1(1, 1, batch_size, filternum * conv1_for_pool.h);
 	init_zero(d_expanded_pooled_conv1);
+	d_expanded_pooled_conv1.updateDev();
 	//Tensor reshaped_pool1(batch_size, filternum, convoluted1_h/poolsize, convoluted1_w/poolsize); //poolingの後、整形これいるか？
 
 	Tensor pooled_conv1_test(test_data.d, filternum, conv1_for_pool.h, 1);
 	init_zero(pooled_conv1_test);
+	pooled_conv1_test.updateDev();
+
 	Tensor expanded_pooled_conv1_test(1, 1, test_data.d, filternum * conv1_for_pool.h);
 	init_zero(expanded_pooled_conv1_test);
+	expanded_pooled_conv1_test.updateDev();
 
 
 
@@ -138,44 +168,59 @@ int main() {
 	init_random(w1);
 	w1.updateDev();
 	init_zero(dw1);
+	dw1.updateDev();
+
 	Tensor b1(1, 1, 1, feature_size1);
 	Tensor db1(1, 1, 1, feature_size1);
 	init_zero(b1);
 	b1.updateDev();
 	init_zero(db1);
+	db1.updateDev();
 
 	Tensor hidden2(1, 1, batch_size, feature_size1);
 	Tensor d_hidden2(1, 1, hidden2.h, hidden2.w);
 	init_zero(hidden2);
 	init_zero(d_hidden2);
+	hidden2.updateDev();
+	d_hidden2.updateDev();
 
 	IntTensor relu2mask(1, 1, hidden2.h, hidden2.w);
 	init_zeroint(relu2mask);
+	relu2mask.updateDev();
+
 
 	Tensor hidden2_test(1, 1, test_size, feature_size1); //1epoch終了時のテスト専用のhidden2
 	init_zero(hidden2_test);
+	hidden2_test.updateDev();
 	IntTensor relu2mask_test(1, 1, hidden2_test.h, hidden2_test.w);
 	init_zeroint(relu2mask_test);
+	relu2mask_test.updateDev();
 
 	Tensor w2(1, 1, feature_size1, label_size);
 	init_random(w2);
 	w2.updateDev();
 	Tensor dw2(1, 1, feature_size1, label_size);
 	init_zero(dw2);
+	dw2.updateDev();
 	Tensor b2(1, 1, 1, label_size);
 	Tensor db2(1, 1, 1, label_size);
 	init_zero(b2);
 	b2.updateDev();
 	init_zero(db2);
+	db2.updateDev();
 
 	Tensor y(1, 1, batch_size, label_size);
 	Tensor dy(1, 1, batch_size, label_size);
 
 	Tensor y_test(1, 1, test_size, label_size);
 	init_zero(y);
+	y.updateDev();
 	init_zero(dy);
+	dy.updateDev();
 
 	init_zero(y_test);
+	y_test.updateDev();
+
 
 
 	//時間計測開始
@@ -414,6 +459,8 @@ void reshape_tensor(Tensor &a, Tensor &b) {
 		cout << "Tensor size mismatch in reshape tensor." << endl;
 		return;
 	}
+	#pragma acc kernels present(a, b)
+	#pragma acc loop independent vector
 	for (int32_t i=0; i < a.size; i++) {
 		b[i] = a[i];
 	}

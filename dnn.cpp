@@ -329,7 +329,10 @@ void back_relu(Tensor &ds, IntTensor &erasedmask) {
 		return;
 	}
 
+	#pragma acc kernels present(ds, erasedmask)
+	#pragma acc loop independent gang
 	for (int32_t i=0; i < ds.h; i++) {
+		#pragma acc loop independent vector
 		for (int32_t j=0; j < ds.w; j++) {
 			if (erasedmask[i*ds.w + j] == 1) {
 				ds[i*ds.w + j] = 0.;
@@ -341,7 +344,7 @@ void back_relu(Tensor &ds, IntTensor &erasedmask) {
 void softmax(Tensor &a) {
 	float max_pxl;
 	float sum_exp;
-	#pragma acc paraint32_tel present(a) private(max_pxl, sum_exp)
+	#pragma acc parallel present(a) private(max_pxl, sum_exp)
 	#pragma acc loop independent gang
 	for (int32_t i=0; i < a.h; i++) {
 		max_pxl = -1000000.;
@@ -391,6 +394,7 @@ void sum_vertical(Tensor &a, Tensor &v) {
 		return;
 	}
 	init_zero(v);
+	v.updateDev();
 	#pragma acc kernels present(a, v)
 	#pragma acc loop seq
 	for (int32_t i=0; i < a.h; i++) {
@@ -431,7 +435,7 @@ float accuracy(Tensor &y, Tensor &t) {
 	float tmax;
 	float acc = 0.;
 
-	#pragma acc paraint32_tel present(y, t)
+	#pragma acc parallel present(y, t)
 	#pragma acc loop independent vector reduction( + : acc)
 	for (int32_t i=0; i < y.h; i++) {
 		ymax_idx = -1;

@@ -19,9 +19,6 @@ class Tensor
 
 		#pragma acc routine seq
 		float& operator[](size_t idx) {
-			if (idx >= size) {
-				cout << "Tensor out of range!" << endl;
-			}
 			return ptr[idx];
 		};
 
@@ -102,9 +99,6 @@ class IntTensor
 
 		#pragma acc routine seq
 		int32_t& operator[](size_t idx) {
-			if (idx >= size) {
-				cout << "Tensor out of range!" << endl;
-			}
 			return ptr[idx];
 		};
 		

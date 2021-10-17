@@ -19,10 +19,10 @@ void im2col(Tensor &image, Tensor &expanded, int32_t padsize, int32_t filtersize
 	int32_t imgsize3 = image.size / datanum;
 	int32_t imgsize2 = imgsize3 / channel;
 
-	//int32_t convoluted1_h = (image.h + padsize*2 - filtersize + 1) / stride;
-	//int32_t convoluted1_w = (image.w + padsize*2 - filtersize + 1) / stride;
-	//int32_t filterspace = image.c * filtersize * filtersize; //フィルターが一回に畳みこむ要素数
-	//int32_t expsize_data = convoluted1_h * convoluted1_w * filterspace; //1dataあたりのexpandedのサイズ
+	int32_t convoluted1_h = (image.h + padsize*2 - filtersize + 1) / stride;
+	int32_t convoluted1_w = (image.w + padsize*2 - filtersize + 1) / stride;
+	int32_t filterspace = image.c * filtersize * filtersize; //フィルターが一回に畳みこむ要素数
+	int32_t expsize_data = convoluted1_h * convoluted1_w * filterspace; //1dataあたりのexpandedのサイズ
 
 
 	#pragma acc kernels present(image, expanded)
@@ -36,16 +36,16 @@ void im2col(Tensor &image, Tensor &expanded, int32_t padsize, int32_t filtersize
 						for (int32_t fw=0; fw < filtersize; fw++) {
 							int32_t h_Img = ih + fh;
 							int32_t w_Img = iw + fw;
-							//int32_t h_conv_times = (ih + padsize) / stride;
-							//int32_t w_conv_times = (iw + padsize) / stride;
-							//exp_idx = d*expsize_data + h_conv_times*convoluted1_w*filterspace + w_conv_times*filterspace + c*filtersize*filtersize + fh*filtersize + fw;
+							int32_t h_conv_times = (ih + padsize) / stride;
+							int32_t w_conv_times = (iw + padsize) / stride;
+							exp_idx = d*expsize_data + h_conv_times*convoluted1_w*filterspace + w_conv_times*filterspace + c*filtersize*filtersize + fh*filtersize + fw;
 							if (h_Img < 0 || w_Img < 0 || h_Img >= height || w_Img >= width) {
 								expanded[exp_idx] = 0.;
 							}
 							else {
 								expanded[exp_idx] = image[d*imgsize3 + c*imgsize2 + h_Img*width + w_Img];
 							}
-							exp_idx++;
+							//exp_idx++;
 						}
 					}
 				}
@@ -134,7 +134,10 @@ void col2im_inverse(Tensor &expanded, Tensor &image) {
 	int32_t imgsize3 = image.size / datanum;
 	int32_t imgsize2 = imgsize3 / channel;
 
+	#pragma acc kernels present(expanded, image)
+	#pragma acc loop independent gang
 	for (int32_t d=0; d < datanum; d++) {
+		#pragma acc loop independent vector
 		for (int32_t c=0; c < channel; c++) {
 			for (int32_t h=0; h < height; h++) {
 				for (int32_t w=0; w < width; w++) {
@@ -204,16 +207,22 @@ void col2im_pool(Tensor &expanded, Tensor &image, int32_t filtersize) {
 	int32_t imgsize3 = image.size / datanum;
 	int32_t imgsize2 = imgsize3 / channel;
 
+	#pragma acc kernels present(image, expanded)
+	#pragma acc loop independent gang
 	for (int32_t d=0; d < datanum; d++) {
+		#pragma acc loop independent vector
 		for (int32_t c=0; c < channel; c++) {
 			for (int32_t ih=0; ih <= height-filtersize; ih+=filtersize) { //filterに取り込まれる最左上の要素のy座標
 				for (int32_t iw=0; iw <= width-filtersize; iw+=filtersize) { //同上のx座標
 					for (int32_t fh=0; fh < filtersize; fh++) {
 						for (int32_t fw=0; fw < filtersize; fw++) {
+							int32_t h_pool_times = ih / filtersize;
+							int32_t w_pool_times = iw / filtersize;
 							int32_t h_Img = ih + fh;
 							int32_t w_Img = iw + fw;
+							exp_idx = d*imgsize3 + c*imgsize2 + h_pool_times*width*filtersize + w_pool_times*filtersize*filtersize + fh*filtersize + fw;
 							image[d*imgsize3 + c*imgsize2 + h_Img*width + w_Img] = expanded[exp_idx];
-							exp_idx++;
+							//exp_idx++;
 						}
 					}
 				}
@@ -239,7 +248,10 @@ void back_pooling(Tensor &d_before_pool, Tensor &d_pooled, IntTensor &pooled_idx
 	int32_t poolsize3 = d_pooled.size / d_pooled.d;
 	int32_t poolsize2 = poolsize3 / d_pooled.c;
 
+	#pragma acc kernels present(image, expanded)
+	#pragma acc loop independent gang
 	for (int32_t d=0; d < datanum; d++) {
+		#pragma acc loop independent vector
 		for (int32_t c=0; c < channel; c++) {
 			for (int32_t h=0; h < height; h++) {
 				int32_t max_idx = pooled_idx[d*channel*height + c*height + h];
@@ -274,7 +286,10 @@ void pooling(Tensor &expanded, Tensor &pooled, IntTensor &pooled_idx, int32_t fi
 	int32_t poolsize2 = poolsize3 / pooled.c;
 
 
+	#pragma acc kernels present(expanded, pooled, pooled_idx)
+	#pragma acc loop independent gang
 	for (int32_t d=0; d < datanum; d++) {
+		#pragma acc loop independent vector
 		for (int32_t c=0; c < channel; c++) {
 			for (int32_t h=0; h < height; h++) {
 				float max = -9999.;
@@ -285,10 +300,10 @@ void pooling(Tensor &expanded, Tensor &pooled, IntTensor &pooled_idx, int32_t fi
 						max_idx = w;
 					}
 				}
-				if (max_idx == -1) {
-					cout << "error in pooling!" << endl;
-					return;
-				}
+				//if (max_idx == -1) {
+					//cout << "error in pooling!" << endl;
+					//return;
+				//}
 				pooled[d*poolsize3 + c*poolsize2 + h] = max;
 				pooled_idx[d*poolsize3 + c*poolsize2 + h] = max_idx; //maxとして選ばれたもののw方向のidxを記録
 			}
