@@ -9,7 +9,7 @@ Executable on GPU.
  
 # Features
 
-This program supports Tensor Core. 
+This program supports Tensor Core. (dot.cu)
 
 Tensor Core is an arithmetic circuit specialized for matrix multiplication operations. 
 
