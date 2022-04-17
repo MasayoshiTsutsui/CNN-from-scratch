@@ -12,7 +12,7 @@ OPenACC is a directive based GPU programming support framework.
  
 # Features
 
-This program supports Tensor Core. (dot.cu)
+This program supports Tensor Core. (the code is in dot.cu)
 
 Tensor Core is an arithmetic circuit specialized for matrix multiplication operations. 
 
