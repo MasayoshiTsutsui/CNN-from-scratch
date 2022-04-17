@@ -1,7 +1,7 @@
-# dnn
+# CNN-from-scratch
 
 
-# Deep Neural Network From Scratch
+# Deep Convolutional Neural Network From Scratch
 
 MNIST Image recognition programs written in C++, OPenACC, and CUDA.
 
@@ -9,7 +9,7 @@ Executable on GPU.
  
 # Features
 
-This program can run on Tensor Cores.
+This program supports Tensor Core. 
 
-Tensor Cores are specific circuits on recent GPUs which calculate matrix multiplication.
+Tensor Core is an arithmetic circuit specialized for matrix multiplication operations. 
 
