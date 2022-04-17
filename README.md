@@ -3,9 +3,12 @@
 
 # Deep Convolutional Neural Network From Scratch
 
-MNIST Image recognition programs written in C++, OPenACC, and CUDA.
+This is an image recognition program for MNIST dataset written in C++ from scratch.
 
-Executable on GPU.
+As OPenACC and CUDA are applied to the code, it can run on GPUs.
+
+OPenACC is a directive based GPU programming support framework.
+
  
 # Features
 
