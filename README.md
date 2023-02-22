@@ -2,7 +2,7 @@
 <img src="https://user-images.githubusercontent.com/62000880/220343316-946257f9-5fd8-413a-9146-91a2719c3d94.png" width=250><img src="https://user-images.githubusercontent.com/62000880/220343786-16b1b7cf-ec0d-4d4a-b8bf-7b7f71468f76.png" width=250>
 
 ## About
-This is a CNN trainer for MNIST dataset written in C++ and CUDA from scratch.
+This is a CNN trainer for [MNIST handwritten digit dataset](http://yann.lecun.com/exdb/mnist/) written in C++ and CUDA from scratch.
 
 ## Tools for GPU implementation
 - CUDA (https://developer.nvidia.com/cuda-toolkit)
@@ -15,7 +15,7 @@ This is a CNN trainer for MNIST dataset written in C++ and CUDA from scratch.
 ## Feature
 ![image](https://user-images.githubusercontent.com/62000880/220344724-a0aed1dc-f98a-451c-af8a-497c7aca259d.png)
 
-This program supports NVIDIA Tensor Core(https://www.nvidia.com/en-us/data-center/tensor-cores/). 
+This program supports [NVIDIA Tensor Core](https://www.nvidia.com/en-us/data-center/tensor-cores/). 
 Tensor Core is an arithmetic circuit specialized for matrix multiplication operations. 
 
 CUDA can access Tensor Cores through WMMA API like below.
